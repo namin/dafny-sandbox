@@ -272,18 +272,11 @@ ghost method corollary_soundness(t: tm, t': tm, T: ty, n: nat)
   requires has_type(Context(Empty), t) == Some(T);
   requires reduces_to(t, t', n);
   ensures !stuck(t');
+  decreases n;
 {
   theorem_progress(t);
-  var i: nat := n;
-  var ti := t;
-  while (i > 0 && step(ti).Some? && ti != t')
-    invariant has_type(Context(Empty), ti) == Some(T);
-    invariant reduces_to(ti, t', i);
-    invariant !stuck(ti);
-  {
-    theorem_preservation(ti);
-    i := i - 1;
-    ti := step(ti).get;
-    theorem_progress(ti);
+  if (t != t') {
+   theorem_preservation(t);
+   corollary_soundness(step(t).get, t', T, n-1);
   }
 }
