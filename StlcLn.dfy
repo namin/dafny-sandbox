@@ -4,7 +4,7 @@
 // http://www.chargueraud.org/softs/ln/
 // https://github.com/namin/coq-sandbox/blob/master/STLC.v
 
-datatype atom = a(nat);
+datatype atom = a(i: nat);
 
 datatype typ = typ_base | typ_arrow(typ, typ);
 
@@ -101,14 +101,26 @@ function size(e: exp): nat
   case app(e1, e2) => 1 + size(e1) + size(e2)
 }
 
-predicate lc(e: exp)
-  decreases size(e);
+copredicate lc_fvar(e: exp)
+  requires e.fvar?;
 {
-  /* var */ if (e.fvar?) then true
-  /* abs */ else if (e.abs?) then forall x: atom :: lc(open_a(e.body, x))
-  /* app */ else if (e.app?) then lc(e.f) && lc(e.arg)
-            else false
+  true
 }
+copredicate lc_abs(e: exp, L: set<atom>, L': set<atom>)
+  requires e.abs?;
+{
+  forall x :: x in L && x !in L' ==> lc(open_a(e.body, x))
+}
+copredicate lc_app(e: exp)
+  requires e.app?;
+{
+  lc(e.f) && lc(e.arg)
+}
+copredicate lc(e: exp)
+{
+  (e.fvar? && lc_fvar(e)) || (e.abs? &&  forall L': set<atom> :: forall L: set<atom> :: L > L' ==> lc_abs(e, L, L')) || (e.app? && lc_app(e))
+}
+
 
 ghost method lemma_open_rec_lc_core(e: exp, j: nat, v: exp, i: nat, u: exp)
   requires i != j;
@@ -121,21 +133,38 @@ ghost method lemma_open_rec_lc_core(e: exp, j: nat, v: exp, i: nat, u: exp)
   }
 }
 
+ghost method bigger(L': set<atom>, extra: atom) returns (L: set<atom>)
+  requires extra !in L';
+  ensures L > L';
+{
+  L := L' + {extra};
+}
+
 ghost method lemma_open_rec_lc(k: nat, u: exp, e: exp)
   requires lc(e);
   ensures e == open_rec(k, u, e);
   decreases size(e);
 {
   if (e.abs?) {
-    assert forall x: atom :: lc(open_a(e.body, x));
-    parallel (x: atom)
+    var L' := {};
+    parallel (L | L > L')
       ensures e.body == open_rec(k+1, u, e.body);
     {
-      lemma_open_rec_lc(k+1, u, open_a(e.body, x));
-      assert open_rec(0, fvar(x), e.body) == open_rec(k+1, u, open_rec(0, fvar(x), e.body));
-      lemma_open_rec_lc_core(e.body, 0, fvar(x), k+1, u);
-      assert e.body == open_rec(k+1, u, e.body);
+      assert lc_abs(e, L, L');
+      parallel (x | x in L && x !in L')
+        ensures e.body == open_rec(k+1, u, e.body);
+      {
+        assert lc(open_a(e.body, x));
+        lemma_open_rec_lc(k+1, u, open_a(e.body, x));
+        assert open_rec(0, fvar(x), e.body) == open_rec(k+1, u, open_rec(0, fvar(x), e.body));
+        lemma_open_rec_lc_core(e.body, 0, fvar(x), k+1, u);
+        assert e.body == open_rec(k+1, u, e.body);
+      }
     }
+    assert forall L :: L > L' ==> e.body == open_rec(k+1, u, e.body);
+    var L := bigger(L', a(0));
+    assert L > L';
+    assert e.body == open_rec(k+1, u, e.body); // FAILS!
   }
 }
 
@@ -157,4 +186,35 @@ ghost method lemma_subst_open_var(x: atom, y: atom, u: exp, e: exp)
   ensures open(subst(x, u, e), fvar(y)) == subst(x, u, open(e, fvar(y)));
 {
   lemma_subst_open_rec(e, fvar(y), u, x, 0);
+}
+
+ghost method lemma_subst_lc(x: atom, u: exp, e: exp)
+  requires lc(e);
+  requires lc(u);
+  ensures lc(subst(x, u, e));
+  decreases size(e);
+{
+  if (e.abs?) {
+    var L' := {x};
+    parallel (L | L > L')
+      ensures forall y :: y in L && y !in L' ==> lc(open(subst(x, u, e.body), fvar(y)));
+    {
+      assert lc_abs(e, L, L');
+      parallel (y | y in L && y !in L')
+        ensures lc(open(subst(x, u, e.body), fvar(y)));
+      {
+        lemma_subst_lc(x, u, open_a(e.body, y));
+        assert open_a(e.body, y) == open(e.body, fvar(y));
+        assert lc(open(e.body, fvar(y)));
+        assert lc(subst(x, u, open(e.body, fvar(y))));
+        lemma_subst_open_var(x, y, u, e.body);
+        assert lc(open(subst(x, u, e.body), fvar(y)));
+      }
+    }
+    assert forall L :: L > L' ==> forall y :: y in L && y !in L' ==> lc(open(subst(x, u, e.body), fvar(y)));
+    assert forall L :: L > L' ==> lc_abs(subst(x, u, e), L, L');
+    var L := bigger(L', a(x.i+1));
+    assert lc_abs(subst(x, u, e), L, L'); // FAILS!
+    assert lc(subst(x, u, e)); // FAILS!
+  }
 }
