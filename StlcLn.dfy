@@ -124,44 +124,181 @@ copredicate lc(e: exp, L: seq<atom>)
 }
 
 datatype option<T> = None | Some(get: T);
-datatype ev_lc = ev_lc_fvar | ev_lc_abs(L: seq<atom>) | ev_lc_app(ev_f: ev_lc, ev_arg: ev_lc);
+datatype ev_lc = ev_lc_fvar | ev_lc_abs(sup: nat) | ev_lc_app(ev_f: ev_lc, ev_arg: ev_lc);
+function ev_lc_maxsup(ev: ev_lc, s: nat): nat
+{
+  match ev
+  case ev_lc_fvar => s
+  case ev_lc_abs(sup) => if (sup <= s) then s else sup
+  case ev_lc_app(ev_f, ev_arg) => if (ev_lc_maxsup(ev_arg, s) <= ev_lc_maxsup(ev_f, s)) then ev_lc_maxsup(ev_f, s) else ev_lc_maxsup(ev_arg, s)
+}
+ghost method ev_lc_maxsup_prop(ev: ev_lc, r: nat)
+  requires ev_lc_maxsup(ev, r) <= r;
+  ensures ev.ev_lc_fvar? ==> r <= r;
+  ensures ev.ev_lc_app? ==> ev_lc_maxsup(ev.ev_f, r) <= r && ev_lc_maxsup(ev.ev_arg, r) <= r;
+  ensures ev.ev_lc_abs? ==> ev.sup <= r;
+{
+}
 predicate is_ev_lc(e: exp, ev: ev_lc)
   decreases size(e);
 {
   match ev
   case ev_lc_fvar => e.fvar?
-  case ev_lc_abs(L) => e.abs? && forall x :: x !in L ==> build_ev_lc(open_a(e.body, x), L).Some?
+  case ev_lc_abs(sup) => e.abs? && build_ev_lc(open_a(e.body, a(sup)), sup).Some? && forall i :: i >= sup ==> build_ev_lc(open_a(e.body, a(i)), sup) == build_ev_lc(open_a(e.body, a(sup)), sup)
   case ev_lc_app(ev_f, ev_arg) => e.app? && is_ev_lc(e.f, ev_f) && is_ev_lc(e.arg, ev_arg)
 }
-function build_ev_lc(e: exp, L: seq<atom>): option<ev_lc>
+function build_ev_lc(e: exp, sup: nat): option<ev_lc>
   decreases size(e);
+  ensures build_ev_lc(e, sup).Some? ==> ev_lc_maxsup(build_ev_lc(e, sup).get, sup) == sup;
 {
   if (e.fvar?) then Some(ev_lc_fvar)
-  else if (e.abs? && forall y :: y !in L ==> build_ev_lc(open_a(e.body, y), L).Some?) then Some(ev_lc_abs(L))
-  else if (e.app? && build_ev_lc(e.f, L).Some? && build_ev_lc(e.arg, L).Some?) then Some(ev_lc_app(build_ev_lc(e.f, L).get, build_ev_lc(e.arg, L).get))
+  else if (e.abs? && build_ev_lc(open_a(e.body, a(sup)), sup).Some? && forall i :: i >= sup ==> build_ev_lc(open_a(e.body, a(i)), sup) == build_ev_lc(open_a(e.body, a(sup)), sup)) then Some(ev_lc_abs(sup))
+  else if (e.app? && build_ev_lc(e.f, sup).Some? && build_ev_lc(e.arg, sup).Some?) then Some(ev_lc_app(build_ev_lc(e.f, sup).get, build_ev_lc(e.arg, sup).get))
   else None
 }
-ghost method built_ev_lc(e: exp, L: seq<atom>)
-  requires build_ev_lc(e, L).Some?;
-  ensures is_ev_lc(e, build_ev_lc(e, L).get);
+ghost method built_ev_lc(e: exp, sup: nat)
+  requires build_ev_lc(e, sup).Some?;
+  ensures is_ev_lc(e, build_ev_lc(e, sup).get);
   decreases size(e);
 {
 }
-ghost method build_ev_lc_bigger(e: exp, L: seq<atom>, R: seq<atom>)
-  requires build_ev_lc(e, L).Some?;
-  requires forall y :: y !in R ==> y !in L;
-  ensures build_ev_lc(e, R).Some?;
+ghost method can_build_ev_lc(e: exp, sup: nat, ev: ev_lc)
+  requires ev_lc_maxsup(ev, sup) <= sup;
+  requires is_ev_lc(e, ev);
+  ensures build_ev_lc(e, sup).Some?;
+{
+  if (e.abs?) {
+    assert ev.sup <= sup;
+    build_ev_lc_bigger(open_a(e.body, a(sup)), ev.sup, sup);
+    built_ev_lc(open_a(e.body, a(sup)), sup);
+    var ev_body :=  build_ev_lc(open_a(e.body, a(sup)), sup).get;
+    parallel (i | i >= sup)
+      ensures build_ev_lc(open_a(e.body, a(i)), sup) == Some(ev_body);
+    {
+      build_ev_lc_bigger(open_a(e.body, a(i)), ev.sup, sup);
+      build_ev_lc_bigger_open(e.body, i, ev.sup, sup, build_ev_lc(open_a(e.body, a(i)), ev.sup).get, ev_body);
+    }
+  }
+  if (e.app?) {
+    can_build_ev_lc(e.f, sup, ev.ev_f);
+    can_build_ev_lc(e.arg, sup, ev.ev_arg);
+  }
+}
+ghost method build_ev_lc_bigger_open(e: exp, i: nat, sup: nat, sup': nat, ev: ev_lc, ev': ev_lc)
+  requires i >= sup';
+  requires build_ev_lc(open_a(e, a(i)), sup) == Some(ev);
+  requires build_ev_lc(open_a(e, a(sup)), sup) == Some(ev);
+  requires build_ev_lc(open_a(e, a(sup')), sup') == Some(ev');
+  requires build_ev_lc(open_a(e, a(i)), sup').Some?;
+  ensures build_ev_lc(open_a(e, a(i)), sup') == Some(ev');
+{
+  if (e.abs?) {
+    assert ev' == ev_lc_abs(sup');
+  }
+  if (e.app?) {
+    build_ev_lc_bigger_open(e.f, i, sup, sup', ev.ev_f, ev'.ev_f);
+    build_ev_lc_bigger_open(e.arg, i, sup, sup', ev.ev_arg, ev'.ev_arg);
+  }
+}
+ghost method build_ev_lc_bigger(e: exp, sup: nat, sup': nat)
+  requires build_ev_lc(e, sup).Some?;
+  requires sup' >= sup;
+  ensures build_ev_lc(e, sup').Some?;
   decreases size(e);
 {
   if (e.abs?) {
-    var evL := build_ev_lc(e, L).get;
-    assert forall y :: y !in L ==> build_ev_lc(open_a(e.body, y), L).Some?;
-    assert forall y :: y !in R ==> build_ev_lc(open_a(e.body, y), L).Some?;
-    parallel (y | y !in R)
-      ensures build_ev_lc(open_a(e.body, y), R).Some?;
+    var evL := build_ev_lc(e, sup).get;
+    assert build_ev_lc(open_a(e.body, a(sup)), sup).Some?;
+    assert forall i :: i >= sup ==> build_ev_lc(open_a(e.body, a(i)), sup) == build_ev_lc(open_a(e.body, a(sup)), sup);
+    assert forall i :: i >= sup' ==> build_ev_lc(open_a(e.body, a(i)), sup) == build_ev_lc(open_a(e.body, a(sup)), sup);
+    parallel (i | i >= sup')
+      ensures build_ev_lc(open_a(e.body, a(sup')), sup').Some?;
+      ensures build_ev_lc(open_a(e.body, a(i)), sup') == build_ev_lc(open_a(e.body, a(sup')), sup');
     {
-      build_ev_lc_bigger(open_a(e.body, y), L, R);
+      build_ev_lc_bigger(open_a(e.body, a(i)), sup, sup');
+      build_ev_lc_bigger_open(e.body, i, sup, sup', build_ev_lc(open_a(e.body, a(sup)), sup).get,  build_ev_lc(open_a(e.body, a(sup')), sup').get);
     }
+  }
+}
+
+ghost method equiv_ev_lc_subst_open(e: exp, x: atom, u: exp, i: nat, sup: nat)
+  requires x.i < sup;
+  requires i >= sup;
+  requires build_ev_lc(subst(x, u, open(e, fvar(a(i)))), sup).Some?;
+  requires build_ev_lc(subst(x, u, open(e, fvar(a(sup)))), sup).Some?;
+  ensures build_ev_lc(subst(x, u, open(e, fvar(a(i)))), sup) == build_ev_lc(subst(x, u, open(e, fvar(a(sup)))), sup);
+{
+  if (e.abs?) {
+
+  }
+  else if (e.app?) {
+    equiv_ev_lc_subst_open(e.f, x, u, i, sup);
+    equiv_ev_lc_subst_open(e.arg, x, u, i, sup);
+  }
+  else if (e.fvar?) {
+
+  }
+  else if (e.bvar?) {
+
+  }
+}
+
+ghost method equiv_ev_lc_subst(e: exp, x: atom, y: atom, z: atom, sup: nat)
+  requires x.i < sup;
+  requires build_ev_lc(subst(x, fvar(y), e), sup).Some?;
+  ensures build_ev_lc(subst(x, fvar(z), e), sup) == build_ev_lc(subst(x, fvar(y), e), sup);
+  decreases size(e);
+{
+  if (e.abs?) {
+    assert build_ev_lc(open_a(subst(x, fvar(y), e).body, a(sup)), sup).Some?;
+    assert open_a(subst(x, fvar(y), e).body, a(sup)) == open(subst(x, fvar(y), e).body, fvar(a(sup)));
+    assert open(subst(x, fvar(y), e).body, fvar(a(sup))) == open(subst(x, fvar(y), e.body), fvar(a(sup)));
+    lemma_subst_open_var'(x, a(sup), fvar(y), e.body, ev_lc_fvar);
+    assert open(subst(x, fvar(y), e.body), fvar(a(sup))) == subst(x, fvar(y), open(e.body, fvar(a(sup))));
+
+    equiv_ev_lc_subst(open_a(e.body, a(sup)), x, y, z, sup);
+    assert build_ev_lc(subst(x, fvar(z), open(e.body, fvar(a(sup)))), sup) == build_ev_lc(subst(x, fvar(y), open(e.body, fvar(a(sup)))), sup);
+
+    lemma_subst_open_var'(x, a(sup), fvar(z), e.body, ev_lc_fvar);
+    assert open(subst(x, fvar(z), e.body), fvar(a(sup))) == subst(x, fvar(z), open(e.body, fvar(a(sup))));
+    assert open(subst(x, fvar(z), e).body, fvar(a(sup))) == open(subst(x, fvar(z), e.body), fvar(a(sup)));
+    assert open_a(subst(x, fvar(z), e).body, a(sup)) == open(subst(x, fvar(z), e).body, fvar(a(sup)));
+    assert build_ev_lc(open_a(subst(x, fvar(z), e).body, a(sup)), sup).Some?;
+
+    assert forall i :: i >= sup ==> build_ev_lc(open_a(subst(x, fvar(y), e).body, a(i)), sup) == build_ev_lc(open_a(subst(x, fvar(y), e).body, a(sup)), sup);
+    parallel (i | i >= sup)
+      ensures build_ev_lc(subst(x, fvar(z), open(e.body, fvar(a(i)))), sup) == build_ev_lc(subst(x, fvar(y), open(e.body, fvar(a(i)))), sup);
+      ensures build_ev_lc(subst(x, fvar(z), open(e.body, fvar(a(i)))), sup) == build_ev_lc(subst(x, fvar(z), open(e.body, fvar(a(sup)))), sup);
+      ensures build_ev_lc(subst(x, fvar(y), open(e.body, fvar(a(i)))), sup) == build_ev_lc(subst(x, fvar(z), open(e.body, fvar(a(i)))), sup);
+      ensures open(subst(x, fvar(y), e.body), fvar(a(i))) == subst(x, fvar(y), open(e.body, fvar(a(i))));
+      ensures open(subst(x, fvar(z), e.body), fvar(a(i))) == subst(x, fvar(z), open(e.body, fvar(a(i))));
+    {
+      assert build_ev_lc(open_a(subst(x, fvar(y), e).body, a(i)), sup).Some?;
+      assert open_a(subst(x, fvar(y), e).body, a(i)) == open(subst(x, fvar(y), e).body, fvar(a(i)));
+      assert open(subst(x, fvar(y), e).body, fvar(a(i))) == open(subst(x, fvar(y), e.body), fvar(a(i)));
+      lemma_subst_open_var'(x, a(i), fvar(y), e.body, ev_lc_fvar);
+      assert open(subst(x, fvar(y), e.body), fvar(a(i))) == subst(x, fvar(y), open(e.body, fvar(a(i))));
+
+      equiv_ev_lc_subst(open_a(e.body, a(i)), x, y, z, sup);
+      assert build_ev_lc(subst(x, fvar(z), open(e.body, fvar(a(i)))), sup) == build_ev_lc(subst(x, fvar(y), open(e.body, fvar(a(i)))), sup);
+
+      lemma_subst_open_var'(x, a(i), fvar(z), e.body, ev_lc_fvar);
+      assert open(subst(x, fvar(z), e.body), fvar(a(i))) == subst(x, fvar(z), open(e.body, fvar(a(i))));
+      assert open(subst(x, fvar(z), e).body, fvar(a(i))) == open(subst(x, fvar(z), e.body), fvar(a(i)));
+      assert open_a(subst(x, fvar(z), e).body, a(i)) == open(subst(x, fvar(z), e).body, fvar(a(i)));
+      assert build_ev_lc(open_a(subst(x, fvar(z), e).body, a(i)), sup).Some?;
+    }
+    assert build_ev_lc(subst(x, fvar(z), e), sup) == Some(ev_lc_abs(sup));
+    assert build_ev_lc(subst(x, fvar(y), e), sup) == Some(ev_lc_abs(sup));
+  }
+  else if (e.app?) {
+
+  }
+  else if (e.fvar?) {
+
+  }
+  else if (e.bvar?) {
+
   }
 }
 
@@ -217,15 +354,13 @@ ghost method lemma_open_rec_lc'(k: nat, u: exp, e: exp, ev_lc_e: ev_lc)
   decreases size(e);
 {
   if (e.abs?) {
-    var L := ev_lc_e.L;
-    var x := notin(L);
-    assert forall y :: y !in L ==> build_ev_lc(open_a(e.body, y), L).Some?;
-    assert x !in L;
-    assert build_ev_lc(open_a(e.body, x), L).Some?;
-    var ev_body := build_ev_lc(open_a(e.body, x), L).get;
-    built_ev_lc(open_a(e.body, x), L);
-    lemma_open_rec_lc'(k+1, u, open_a(e.body, x), ev_body);
-    lemma_open_rec_lc_core(e.body, 0, fvar(x), k+1, u);
+    var sup := ev_lc_e.sup;
+    assert build_ev_lc(open_a(e.body, a(sup)), sup).Some?;
+    var ev_body := build_ev_lc(open_a(e.body, a(sup)), sup).get;
+    assert forall i :: i >= sup ==> build_ev_lc(open_a(e.body, a(i)), sup) == build_ev_lc(open_a(e.body, a(sup)), sup);
+    built_ev_lc(open_a(e.body, a(sup)), sup);
+    lemma_open_rec_lc'(k+1, u, open_a(e.body, a(sup)), ev_body);
+    lemma_open_rec_lc_core(e.body, 0, fvar(a(sup)), k+1, u);
   }
   if (e.app?) {
     lemma_open_rec_lc'(k, u, e.f, ev_lc_e.ev_f);
@@ -299,52 +434,69 @@ ghost method lemma_subst_lc(x: atom, u: exp, e: exp, L: seq<atom>)
   }
 }
 
-/* -- timeouts :-(
-ghost method lemma_subst_lc'(x: atom, u: exp, e: exp, ev_lc_e: ev_lc, ev_lc_u: ev_lc) returns (ret: ev_lc)
+ghost method lemma_subst_lc'(x: atom, u: exp, e: exp, ev_lc_e: ev_lc, ev_lc_u: ev_lc, sup: nat) returns (ret: ev_lc)
+  requires x.i < sup;
+  requires ev_lc_maxsup(ev_lc_e, sup) <= sup;
+  requires ev_lc_maxsup(ev_lc_u, sup) <= sup;
   requires is_ev_lc(e, ev_lc_e);
   requires is_ev_lc(u, ev_lc_u);
   ensures is_ev_lc(subst(x, u, e), ret);
+  ensures build_ev_lc(subst(x, u, e), sup) == Some(ret);
   decreases size(e);
 {
   if (ev_lc_e.ev_lc_fvar? && e.x!=x) {
     ret := ev_lc_e;
     assert is_ev_lc(subst(x, u, e), ret);
+    assert build_ev_lc(subst(x, u, e), sup) == Some(ret);
   }
   if (ev_lc_e.ev_lc_fvar? && e.x==x) {
-    ret := ev_lc_u;
+    can_build_ev_lc(subst(x, u, e), sup, ev_lc_u);
+    ret := build_ev_lc(subst(x, u, e), sup).get;
+    built_ev_lc(subst(x, u, e), sup);
     assert is_ev_lc(subst(x, u, e), ret);
+    assert build_ev_lc(subst(x, u, e), sup) == Some(ret);
   }
   if (ev_lc_e.ev_lc_abs?) {
-    var L := if (x in ev_lc_e.L) then ev_lc_e.L else [x]+ev_lc_e.L;
-    assert x in L;
-    build_ev_lc_bigger(e, ev_lc_e.L, L);
-    parallel (y | y !in L)
-      ensures build_ev_lc(open(subst(x, u, e.body), fvar(y)), L).Some?;
+    build_ev_lc_bigger(e, ev_lc_e.sup, sup);
+    assert build_ev_lc(e, sup).Some?;
+
+    built_ev_lc(open_a(e.body, a(sup)), sup);
+    var ev_subst_body_sup := lemma_subst_lc'(x, u, open_a(e.body, a(sup)), build_ev_lc(open_a(e.body, a(sup)), sup).get, ev_lc_u, sup);
+    assert open_a(e.body, a(sup)) == open(e.body, fvar(a(sup)));
+    assert build_ev_lc(subst(x, u, open(e.body, fvar(a(sup)))), sup) == Some(ev_subst_body_sup);
+    lemma_subst_open_var'(x, a(sup), u, e.body, ev_lc_u);
+    assert open(subst(x, u, e.body), fvar(a(sup))) == subst(x, u, open(e.body, fvar(a(sup))));
+    assert build_ev_lc(open(subst(x, u, e.body), fvar(a(sup))), sup) == Some(ev_subst_body_sup);
+
+    parallel (i | i >= sup)
+      ensures build_ev_lc(open(subst(x, u, e.body), fvar(a(i))), sup) == Some(ev_subst_body_sup);
     {
-      assert x != y;
-      built_ev_lc(open_a(e.body, y), L);
-      var ev_subst_body := lemma_subst_lc'(x, u, open_a(e.body, y), build_ev_lc(open_a(e.body, y), L).get, ev_lc_u);
-      assert open_a(e.body, y) == open(e.body, fvar(y));
-      assert build_ev_lc(subst(x, u, open(e.body, fvar(y))), L).Some?;
-      lemma_subst_open_var'(x, y, u, e.body, ev_lc_u);
-      assert open(subst(x, u, e.body), fvar(y)) == subst(x, u, open(e.body, fvar(y)));
-      assert build_ev_lc(open(subst(x, u, e.body), fvar(y)), L).Some?;
+      built_ev_lc(open_a(e.body, a(i)), sup);
+      var ev_subst_body := lemma_subst_lc'(x, u, open_a(e.body, a(i)), build_ev_lc(open_a(e.body, a(i)), sup).get, ev_lc_u, sup);
+      assert open_a(e.body, a(i)) == open(e.body, fvar(a(i)));
+      assert build_ev_lc(subst(x, u, open(e.body, fvar(a(i)))), sup) == Some(ev_subst_body);
+      equiv_ev_lc_subst_open(e.body, x, u, i, sup);
+      assert build_ev_lc(subst(x, u, open(e.body, fvar(a(i)))), sup) == Some(ev_subst_body_sup);
+      lemma_subst_open_var'(x, a(i), u, e.body, ev_lc_u);
+      assert open(subst(x, u, e.body), fvar(a(i))) == subst(x, u, open(e.body, fvar(a(i))));
+      assert build_ev_lc(open(subst(x, u, e.body), fvar(a(i))), sup) == Some(ev_subst_body_sup);
     }
-    assert forall y :: y !in L ==> build_ev_lc(open(subst(x, u, e.body), fvar(y)), L).Some?;
-    assert build_ev_lc(subst(x, u, e), L) == Some(ev_lc_abs(L));
-    assert is_ev_lc(subst(x, u, e), ev_lc_abs(L));
-    ret := ev_lc_abs(L);
+    assert build_ev_lc(subst(x, u, e), sup) == Some(ev_lc_abs(sup));
+    assert is_ev_lc(subst(x, u, e), ev_lc_abs(sup));
+    ret := ev_lc_abs(sup);
     assert is_ev_lc(subst(x, u, e), ret);
+    assert build_ev_lc(subst(x, u, e), sup) == Some(ret);
   }
   if (ev_lc_e.ev_lc_app?) {
-    var ev_f := lemma_subst_lc'(x, u, e.f, ev_lc_e.ev_f, ev_lc_u);
-    var ev_arg := lemma_subst_lc'(x, u, e.arg, ev_lc_e.ev_arg, ev_lc_u);
+    var ev_f := lemma_subst_lc'(x, u, e.f, ev_lc_e.ev_f, ev_lc_u, sup);
+    var ev_arg := lemma_subst_lc'(x, u, e.arg, ev_lc_e.ev_arg, ev_lc_u, sup);
     ret := ev_lc_app(ev_f, ev_arg);
     assert is_ev_lc(subst(x, u, e), ret);
+    assert build_ev_lc(subst(x, u, e), sup) == Some(ret);
   }
   assert is_ev_lc(subst(x, u, e), ret);
+  assert build_ev_lc(subst(x, u, e), sup) == Some(ret);
 }
-*/
 
 datatype env = Empty | Extend(a: atom, T: typ, r: env);
 
