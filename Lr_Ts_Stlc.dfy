@@ -186,6 +186,274 @@ ghost method lemma_mstep_trans'(t1: tm, t2: tm, t3: tm, n12: nat, n13: nat)
   }
 }
 
+
+ghost method lemma_mstep_if_c(c: tm, a: tm, b: tm, c': tm, ci: nat)
+  requires mstep(c, c', ci);
+  ensures mstep(tif(c, a, b), tif(c', a, b), ci);
+  decreases ci;
+{
+  if (ci>0) {
+    lemma_mstep_if_c(step(c).get, a, b, c', ci-1);
+  }
+}
+
+ghost method lemma_mstep_app_f(f: tm, arg: tm, f': tm, fi: nat)
+  requires mstep(f, f', fi);
+  ensures mstep(tapp(f, arg), tapp(f', arg), fi);
+  decreases fi;
+{
+  if (fi>0) {
+    lemma_mstep_app_f(step(f).get, arg, f', fi-1);
+  }
+}
+
+ghost method lemma_mstep_app_arg(f: tm, arg: tm, arg': tm, argi: nat)
+  requires value(f);
+  requires mstep(arg, arg', argi);
+  ensures mstep(tapp(f, arg), tapp(f, arg'), argi);
+  decreases argi;
+{
+  if (argi>0) {
+    lemma_mstep_app_arg(f, step(arg).get, arg', argi-1);
+  }
+}
+
+ghost method lemma_if_irred__c_mstep_irred(c: tm, a: tm, b: tm, t': tm, i: nat) returns (c': tm, ci: nat)
+  requires mstep(tif(c, a, b), t', i);
+  requires irred(t');
+  ensures ci<=i && mstep(c, c', ci) && irred(c');
+  decreases i;
+{
+  if (irred(c)) {
+    c' := c;
+    ci := 0;
+  } else {
+    assert step(c).Some?;
+    assert step(tif(c, a, b)) == Some(tif(step(c).get, a, b));
+    lemma_mstep_trans'(tif(c, a, b), tif(step(c).get, a, b), t', 1, i);
+    assert mstep(tif(step(c).get, a, b), t', i-1);
+    var c'', ci' := lemma_if_irred__c_mstep_irred(step(c).get, a, b, t', i-1);
+    assert mstep(step(c).get, c'', ci');
+    lemma_mstep_trans(c, step(c).get, c'', 1, ci');
+    c' := c'';
+    ci := ci'+1;
+  }
+}
+
+ghost method lemma_app_irred__f_mstep_irred(f: tm, arg: tm, t': tm, i: nat) returns (f': tm, fi: nat)
+  requires mstep(tapp(f, arg), t', i);
+  requires irred(t');
+  ensures fi<=i && mstep(f, f', fi) && irred(f');
+  decreases i;
+{
+  if (irred(f)) {
+    f' := f;
+    fi := 0;
+  } else {
+    assert step(f).Some?;
+    assert step(tapp(f, arg)) == Some(tapp(step(f).get, arg));
+    lemma_mstep_trans'(tapp(f, arg), tapp(step(f).get, arg), t', 1, i);
+    assert mstep(tapp(step(f).get, arg), t', i-1);
+    var f'', fi' := lemma_app_irred__f_mstep_irred(step(f).get, arg, t', i-1);
+    assert mstep(step(f).get, f'', fi');
+    lemma_mstep_trans(f, step(f).get, f'', 1, fi');
+    f' := f'';
+    fi := fi'+1;
+  }
+}
+
+ghost method lemma_app_irred__arg_mstep_irred(f: tm, arg: tm, t': tm, i: nat) returns (arg': tm, argi: nat)
+  requires mstep(tapp(f, arg), t', i);
+  requires irred(t');
+  requires value(f);
+  ensures argi<=i && mstep(arg, arg', argi) && irred(arg');
+  decreases i;
+{
+  if (irred(arg)) {
+    arg' := arg;
+    argi := 0;
+  } else {
+    assert step(arg).Some?;
+    assert step(tapp(f, arg)) == Some(tapp(f, step(arg).get));
+    lemma_mstep_trans'(tapp(f, arg), tapp(f, step(arg).get), t', 1, i);
+    assert mstep(tapp(f, step(arg).get), t', i-1);
+    var arg'', argi' := lemma_app_irred__arg_mstep_irred(f, step(arg).get, t', i-1);
+    assert mstep(step(arg).get, arg'', argi');
+    lemma_mstep_trans(arg, step(arg).get, arg'', 1, argi');
+    arg' := arg'';
+    argi := argi'+1;
+  }
+}
+
+// Closed terms (multi)step to closed terms.
+
+ghost method lemma_if_closed(c: tm, a: tm, b: tm)
+  requires closed(tif(c, a, b));
+  ensures closed(c) && closed(a) && closed(b);
+{
+  if (!closed(c)) {
+    assert exists x:nat :: appears_free_in(x, c);
+    parallel (x:nat | appears_free_in(x, c))
+      ensures appears_free_in(x, tif(c, a, b));
+    {
+    }
+    assert exists x:nat :: appears_free_in(x, tif(c, a, b));
+    assert false;
+  }
+  if (!closed(a)) {
+    assert exists x:nat :: appears_free_in(x, a);
+    parallel (x:nat | appears_free_in(x, a))
+      ensures appears_free_in(x, tif(c, a, b));
+    {
+    }
+    assert exists x:nat :: appears_free_in(x, tif(c, a, b));
+    assert false;
+  }
+  if (!closed(b)) {
+    assert exists x:nat :: appears_free_in(x, b);
+    parallel (x:nat | appears_free_in(x, b))
+      ensures appears_free_in(x, tif(c, a, b));
+    {
+    }
+    assert exists x:nat :: appears_free_in(x, tif(c, a, b));
+    assert false;
+  }
+}
+
+ghost method lemma_app_closed(f: tm, arg: tm)
+  requires closed(tapp(f, arg));
+  ensures closed(f) && closed(arg);
+{
+  if (!closed(f)) {
+    assert exists x:nat :: appears_free_in(x, f);
+    parallel (x:nat | appears_free_in(x, f))
+      ensures appears_free_in(x, tapp(f, arg));
+    {
+    }
+    assert exists x:nat :: appears_free_in(x, tapp(f, arg));
+    assert false;
+  }
+  if (!closed(arg)) {
+    assert exists x:nat :: appears_free_in(x, arg);
+    parallel (x:nat | appears_free_in(x, arg))
+      ensures appears_free_in(x, tapp(f, arg));
+    {
+    }
+    assert exists x:nat :: appears_free_in(x, tapp(f, arg));
+    assert false;
+  }
+}
+
+ghost method lemma_abs_closed(x: nat, T: ty, t: tm, y: nat)
+  requires closed(tabs(x, T, t));
+  requires y!=x;
+  ensures !appears_free_in(y, t);
+{
+  assert forall z:nat :: !appears_free_in(z, tabs(x, T, t));
+  parallel (z:nat)
+    ensures z==x || !appears_free_in(z, t);
+  {
+    if (z!=x) {
+      assert !appears_free_in(z, tabs(x, T, t));
+      assert !appears_free_in(z, t);
+    }
+  }
+}
+
+
+ghost method lemma_subst_afi(x: nat, v: tm, t: tm, y: nat)
+  requires closed(v);
+  requires x!=y;
+  requires !appears_free_in(y, subst(x, v, t));
+  ensures !appears_free_in(y, t);
+{
+}
+
+ghost method lemma_subst_afi'(x: nat, v: tm, t: tm)
+  requires closed(v);
+  ensures !appears_free_in(x, subst(x, v, t));
+{
+}
+
+ghost method lemma_subst_afi''(x: nat, v: tm, t: tm, y: nat)
+  requires !appears_free_in(y, t);
+  requires closed(v);
+  ensures !appears_free_in(y, subst(x, v, t));
+{
+}
+
+ghost method lemma_step_preserves_closed(t: tm, t': tm)
+  requires closed(t);
+  requires step(t) == Some(t');
+  ensures closed(t');
+  decreases t;
+{
+  /* AppAbs */
+  if (t.tapp? && t.f.tabs? && value(t.arg)) {
+    assert t' == subst(t.f.x, t.arg, t.f.body);
+    lemma_app_closed(t.f, t.arg);
+    parallel (y:nat)
+      ensures !appears_free_in(y, t');
+    {
+      if (y==t.f.x) {
+        lemma_subst_afi'(y, t.arg, t.f.body);
+        assert !appears_free_in(y, t');
+      } else {
+        lemma_abs_closed(t.f.x, t.f.T, t.f.body, y);
+        assert !appears_free_in(y, t.f.body);
+        lemma_subst_afi''(t.f.x, t.arg, t.f.body, y);
+        assert !appears_free_in(y, t');
+      }
+    }
+    assert closed(t');
+  }
+  /* App1 */
+  else if (t.tapp? && step(t.f).Some?) {
+    assert t' == tapp(step(t.f).get, t.arg);
+    lemma_app_closed(t.f, t.arg);
+    lemma_step_preserves_closed(t.f, step(t.f).get);
+    assert closed(t');
+  }
+  /* App2 */
+  else if (t.tapp? && step(t.arg).Some?) {
+    assert t' == tapp(t.f, step(t.arg).get);
+    lemma_app_closed(t.f, t.arg);
+    lemma_step_preserves_closed(t.arg, step(t.arg).get);
+    assert closed(t');
+  }
+  /* IfTrue */
+  else if (t.tif? && t.c == ttrue) {
+    assert t' == t.a;
+    lemma_if_closed(t.c, t.a, t.b);
+    assert closed(t');
+  }
+  /* IfFalse */
+  else if (t.tif? && t.c == tfalse) {
+    assert t' == t.b;
+    lemma_if_closed(t.c, t.a, t.b);
+    assert closed(t');
+  }
+  /* If */
+  else if (t.tif? && step(t.c).Some?) {
+    assert t' == tif(step(t.c).get, t.a, t.b);
+    lemma_if_closed(t.c, t.a, t.b);
+    lemma_step_preserves_closed(t.c, step(t.c).get);
+    assert closed(t');
+  }
+}
+
+ghost method lemma_multistep_preserves_closed(t: tm, t': tm, i: nat)
+  requires closed(t);
+  requires mstep(t, t', i);
+  ensures closed(t');
+  decreases i;
+{
+  if (i > 0) {
+    lemma_step_preserves_closed(t, step(t).get);
+    lemma_multistep_preserves_closed(step(t).get, t', i-1);
+  }
+}
+
 // BEGIN excerpt Norm.dfy
 
 // Multisubstitutions, multi-extensions, and instantiations
@@ -404,6 +672,22 @@ ghost method lemma_multistep_App2(v: tm, t: tm, t': tm, n: nat)
 }
 // END excerpt Norm.dfy
 
+ghost method lemma_closed_env__closed_lookup(e: partial_map<tm>, x: nat)
+  requires closed_env(e);
+  requires lookup(x, e).Some?;
+  ensures closed(lookup(x, e).get);
+{
+  match e {
+  case Empty => assert false;
+  case Extend(x', v', e') =>
+    if (x'==x) {
+      assert closed(v');
+    } else {
+      lemma_closed_env__closed_lookup(e', x);
+    }
+  }
+}
+
 // Type-Safety states that a well-typed term cannot get stuck:
 predicate type_safety(t: tm)
 {
@@ -429,6 +713,21 @@ predicate V(T: ty, t: tm, k: nat)
   match T
   case TBool => t==ttrue || t==tfalse
   case TArrow(T1, T2) => t.tabs? && (forall j:nat, v :: j <= k ==> closed(v) && V(T1, v, j) ==> E(T2, subst(t.x, v, t.body), j))
+}
+
+// We can fabricate values v in V_0(T, v).
+ghost method make_V0(T: ty) returns (v: tm)
+  ensures closed(v);
+  ensures V(T, v, 0);
+  decreases T;
+{
+  match T {
+  case TBool =>
+    v := ttrue;
+  case TArrow(T1, T2) =>
+    var v' := make_V0(T2);
+    v := tabs(0, T1, v');
+  }
 }
 
 predicate E(T: ty, t: tm, k: nat)
@@ -468,36 +767,6 @@ ghost method lemma_V_arrow(T1: ty, T2: ty, x: nat, body: tm, v: tm, k: nat, j: n
 }
 
 // The logical relations V_k(T, t) and E_k(T, t) is only meant for _closed_ terms.
-
-/*
-ghost method lemma_V_closed(T: ty, t: tm, k: nat)
-  requires V(T, t, k);
-  ensures closed(t);
-{
-  if (T.TArrow?) {
-    parallel (x:nat | x!=t.x)
-      ensures !appears_free_in(x, t.body);
-    {
-       parallel (j:nat, v | j<=k && closed(v) && V(T.paramT, v, j))
-        ensures closed(subst(t.x, v, t.body));
-      {
-        lemma_V_arrow(T.paramT, T.bodyT, t.x, t.body, v, k, j);
-        lemma_E_closed(T.bodyT, subst(t.x, v, t.body), j);
-        assert closed(subst(t.x, v, t.body));
-      }
-    }
-  }
-}
-
-ghost method lemma_E_closed(T: ty, t: tm, k: nat)
-  requires E(T, t, k);
-  ensures closed(t);
-{
-  if (irred(t)) {
-
-  }
-}
-*/
 
 // Let's get around this by defining a logical relation for contexts g_k(c, e).
 predicate g(c: partial_map<ty>, e: partial_map<tm>, k: nat)
@@ -580,7 +849,6 @@ ghost method lemma_g_domains_match(c: partial_map<ty>, e: partial_map<tm>, k: na
   }
 }
 
-
 // For step-indexed logical relations, we need to verify that the relations are monotonic / downward closed.
 
 ghost method lemma_V_monotonic(T: ty, v: tm, k: nat, j: nat)
@@ -617,28 +885,6 @@ ghost method lemma_g_monotonic(c: partial_map<ty>, e: partial_map<tm>, k: nat, j
   }
 }
 
-// NOTE BUG: work around because R(c', body, T2) gets forgotten.
-ghost method lemma_g_monotonic_hack(c: partial_map<ty>, e: partial_map<tm>, k: nat, j: nat, c': partial_map<ty>, body: tm, T2: ty)
-  requires g(c, e, k);
-  requires j <= k;
-  ensures g(c, e, j);
-  requires R(c', body, T2);
-  ensures R(c', body, T2);
-{
-  lemma_g_monotonic(c, e, k, j);
-}
-
-// NOTE BUG: ditto.
-ghost method lemma_g_monotonic_hack'(c: partial_map<ty>, e: partial_map<tm>, k: nat, j: nat, c': partial_map<ty>, body: tm, T2: ty)
-  requires g(c, e, k);
-  requires j <= k;
-  ensures g(c, e, j);
-  requires has_type(Context(c'), body) == Some(T2);
-  ensures has_type(Context(c'), body) == Some(T2);
-{
-  lemma_g_monotonic(c, e, k, j);
-}
-
 ghost method lemma_g_drop_any(c: partial_map<ty>, e: partial_map<tm>, k: nat, x: nat)
   requires g(c, e, k);
   ensures g(drop(x, c), drop(x, e), k);
@@ -672,183 +918,6 @@ ghost method lemma_g_drop(c: partial_map<ty>, e: partial_map<tm>, k: nat)
   }
 }
 
-// We're now ready to define our all-encompassing logical relation R(c, t, T).
-predicate R(c: partial_map<ty>, t: tm, T: ty)
-{
-  forall e, k:nat :: g(c, e, k) ==> E(T, msubst(e, t), k)
-}
-
-ghost method lemma_R(c: partial_map<ty>, e: partial_map<tm>, k: nat, t: tm, T: ty)
-  requires g(c, e, k);
-  requires R(c, t, T);
-  ensures E(T, msubst(e, t), k);
-{
-}
-
-/*
-ghost method lemma_multistep_preserves_E(T: ty, t: tm, t': tm, k: nat, i: nat)
-  requires i<=k;
-  requires E(T, t, k);
-  requires mstep(t, t', i);
-  ensures E(T, t', k-i);
-  decreases t;
-{
-  if (k-i>0) {
-    parallel (i':nat, j:nat, t'' | i'+j<k-i && mstep(t', t'', i') && irred(t''))
-      ensures V(T, t'', j);
-    {
-      lemma_mstep_trans(t, t', t'', i, i');
-    }
-  }
-}
-*/
-
-ghost method lemma_mstep_if_c(c: tm, a: tm, b: tm, c': tm, ci: nat)
-  requires mstep(c, c', ci);
-  ensures mstep(tif(c, a, b), tif(c', a, b), ci);
-  decreases ci;
-{
-  if (ci>0) {
-    lemma_mstep_if_c(step(c).get, a, b, c', ci-1);
-  }
-}
-
-ghost method lemma_mstep_app_f(f: tm, arg: tm, f': tm, fi: nat)
-  requires mstep(f, f', fi);
-  ensures mstep(tapp(f, arg), tapp(f', arg), fi);
-  decreases fi;
-{
-  if (fi>0) {
-    lemma_mstep_app_f(step(f).get, arg, f', fi-1);
-  }
-}
-
-ghost method lemma_mstep_app_arg(f: tm, arg: tm, arg': tm, argi: nat)
-  requires value(f);
-  requires mstep(arg, arg', argi);
-  ensures mstep(tapp(f, arg), tapp(f, arg'), argi);
-  decreases argi;
-{
-  if (argi>0) {
-    lemma_mstep_app_arg(f, step(arg).get, arg', argi-1);
-  }
-}
-
-ghost method lemma_if_irred__c_mstep_irred(c: tm, a: tm, b: tm, t': tm, i: nat) returns (c': tm, ci: nat)
-  requires mstep(tif(c, a, b), t', i);
-  requires irred(t');
-  ensures ci<=i && mstep(c, c', ci) && irred(c');
-  decreases i;
-{
-  if (irred(c)) {
-    c' := c;
-    ci := 0;
-  } else {
-    assert step(c).Some?;
-    assert step(tif(c, a, b)) == Some(tif(step(c).get, a, b));
-    lemma_mstep_trans'(tif(c, a, b), tif(step(c).get, a, b), t', 1, i);
-    assert mstep(tif(step(c).get, a, b), t', i-1);
-    var c'', ci' := lemma_if_irred__c_mstep_irred(step(c).get, a, b, t', i-1);
-    assert mstep(step(c).get, c'', ci');
-    lemma_mstep_trans(c, step(c).get, c'', 1, ci');
-    c' := c'';
-    ci := ci'+1;
-  }
-}
-
-ghost method lemma_app_irred__f_mstep_irred(f: tm, arg: tm, t': tm, i: nat) returns (f': tm, fi: nat)
-  requires mstep(tapp(f, arg), t', i);
-  requires irred(t');
-  ensures fi<=i && mstep(f, f', fi) && irred(f');
-  decreases i;
-{
-  if (irred(f)) {
-    f' := f;
-    fi := 0;
-  } else {
-    assert step(f).Some?;
-    assert step(tapp(f, arg)) == Some(tapp(step(f).get, arg));
-    lemma_mstep_trans'(tapp(f, arg), tapp(step(f).get, arg), t', 1, i);
-    assert mstep(tapp(step(f).get, arg), t', i-1);
-    var f'', fi' := lemma_app_irred__f_mstep_irred(step(f).get, arg, t', i-1);
-    assert mstep(step(f).get, f'', fi');
-    lemma_mstep_trans(f, step(f).get, f'', 1, fi');
-    f' := f'';
-    fi := fi'+1;
-  }
-}
-
-ghost method lemma_app_irred__arg_mstep_irred(f: tm, arg: tm, t': tm, i: nat) returns (arg': tm, argi: nat)
-  requires mstep(tapp(f, arg), t', i);
-  requires irred(t');
-  requires value(f);
-  ensures argi<=i && mstep(arg, arg', argi) && irred(arg');
-  decreases i;
-{
-  if (irred(arg)) {
-    arg' := arg;
-    argi := 0;
-  } else {
-    assert step(arg).Some?;
-    assert step(tapp(f, arg)) == Some(tapp(f, step(arg).get));
-    lemma_mstep_trans'(tapp(f, arg), tapp(f, step(arg).get), t', 1, i);
-    assert mstep(tapp(f, step(arg).get), t', i-1);
-    var arg'', argi' := lemma_app_irred__arg_mstep_irred(f, step(arg).get, t', i-1);
-    assert mstep(step(arg).get, arg'', argi');
-    lemma_mstep_trans(arg, step(arg).get, arg'', 1, argi');
-    arg' := arg'';
-    argi := argi'+1;
-  }
-}
-
-ghost method make_V0(T: ty) returns (v: tm)
-  ensures closed(v);
-  ensures V(T, v, 0);
-  decreases T;
-{
-  match T {
-  case TBool =>
-    v := ttrue;
-  case TArrow(T1, T2) =>
-    var v' := make_V0(T2);
-    v := tabs(0, T1, v');
-  }
-}
-
-// NOTE BUG
-ghost method make_V0_hack(T: ty, c': partial_map<ty>, t': tm, T': ty) returns (v: tm)
-  ensures closed(v);
-  ensures V(T, v, 0);
-  requires has_type(Context(c'), t') == Some(T');
-  ensures has_type(Context(c'), t') == Some(T');
-{
-  v := make_V0(T);
-}
-
-ghost method lemma_subst_afi(x: nat, y: nat, t: tm, v: tm)
-  requires closed(v);
-  requires x!=y;
-  requires !appears_free_in(y, subst(x, v, t));
-  ensures !appears_free_in(y, t);
-{
-}
-
-ghost method lemma_closed_env__closed_lookup(e: partial_map<tm>, x: nat)
-  requires closed_env(e);
-  requires lookup(x, e).Some?;
-  ensures closed(lookup(x, e).get);
-{
-  match e {
-  case Empty => assert false;
-  case Extend(x', v', e') =>
-    if (x'==x) {
-      assert closed(v');
-    } else {
-      lemma_closed_env__closed_lookup(e', x);
-    }
-  }
-}
-
 ghost method lemma_g_msubst_closed(c: partial_map<ty>, e: partial_map<tm>, k: nat, t: tm, T: ty)
   requires has_type(Context(c), t) == Some(T);
   requires g(c, e, k);
@@ -872,7 +941,7 @@ ghost method lemma_g_msubst_closed(c: partial_map<ty>, e: partial_map<tm>, k: na
     parallel (y:nat | y!=x)
       ensures !appears_free_in(y, msubst(drop(x, e), body));
     {
-      lemma_subst_afi(x, y, msubst(drop(x, e), body), v);
+      lemma_subst_afi(x, v, msubst(drop(x, e), body), y);
     }
     lemma_msubst_abs(e, x, T1, body);
   case tapp(f, arg) =>
@@ -891,164 +960,20 @@ ghost method lemma_g_msubst_closed(c: partial_map<ty>, e: partial_map<tm>, k: na
   }
 }
 
-ghost method lemma_if_closed(c: tm, a: tm, b: tm)
-  requires closed(tif(c, a, b));
-  ensures closed(c) && closed(a) && closed(b);
+// We're now ready to define our all-encompassing logical relation R(c, t, T).
+predicate R(c: partial_map<ty>, t: tm, T: ty)
 {
-  if (!closed(c)) {
-    assert exists x:nat :: appears_free_in(x, c);
-    parallel (x:nat | appears_free_in(x, c))
-      ensures appears_free_in(x, tif(c, a, b));
-    {
-    }
-    assert exists x:nat :: appears_free_in(x, tif(c, a, b));
-    assert false;
-  }
-  if (!closed(a)) {
-    assert exists x:nat :: appears_free_in(x, a);
-    parallel (x:nat | appears_free_in(x, a))
-      ensures appears_free_in(x, tif(c, a, b));
-    {
-    }
-    assert exists x:nat :: appears_free_in(x, tif(c, a, b));
-    assert false;
-  }
-  if (!closed(b)) {
-    assert exists x:nat :: appears_free_in(x, b);
-    parallel (x:nat | appears_free_in(x, b))
-      ensures appears_free_in(x, tif(c, a, b));
-    {
-    }
-    assert exists x:nat :: appears_free_in(x, tif(c, a, b));
-    assert false;
-  }
+  forall e, k:nat :: g(c, e, k) ==> E(T, msubst(e, t), k)
 }
 
-ghost method lemma_app_closed(f: tm, arg: tm)
-  requires closed(tapp(f, arg));
-  ensures closed(f) && closed(arg);
-{
-  if (!closed(f)) {
-    assert exists x:nat :: appears_free_in(x, f);
-    parallel (x:nat | appears_free_in(x, f))
-      ensures appears_free_in(x, tapp(f, arg));
-    {
-    }
-    assert exists x:nat :: appears_free_in(x, tapp(f, arg));
-    assert false;
-  }
-  if (!closed(arg)) {
-    assert exists x:nat :: appears_free_in(x, arg);
-    parallel (x:nat | appears_free_in(x, arg))
-      ensures appears_free_in(x, tapp(f, arg));
-    {
-    }
-    assert exists x:nat :: appears_free_in(x, tapp(f, arg));
-    assert false;
-  }
-}
-
-ghost method lemma_abs_closed(x: nat, T: ty, t: tm, y: nat)
-  requires closed(tabs(x, T, t));
-  requires y!=x;
-  ensures !appears_free_in(y, t);
-{
-  assert forall z:nat :: !appears_free_in(z, tabs(x, T, t));
-  parallel (z:nat)
-    ensures z==x || !appears_free_in(z, t);
-  {
-    if (z!=x) {
-      assert !appears_free_in(z, tabs(x, T, t));
-      assert !appears_free_in(z, t);
-    }
-  }
-}
-
-ghost method lemma_subst_afi'(x: nat, v: tm, t: tm)
-  requires closed(v);
-  ensures !appears_free_in(x, subst(x, v, t));
+ghost method lemma_R(c: partial_map<ty>, e: partial_map<tm>, k: nat, t: tm, T: ty)
+  requires g(c, e, k);
+  requires R(c, t, T);
+  ensures E(T, msubst(e, t), k);
 {
 }
 
-ghost method lemma_subst_afi''(x: nat, v: tm, t: tm, y: nat)
-  requires !appears_free_in(y, t);
-  requires closed(v);
-  ensures !appears_free_in(y, subst(x, v, t));
-{
-}
-
-ghost method lemma_step_preserves_closed(t: tm, t': tm)
-  requires closed(t);
-  requires step(t) == Some(t');
-  ensures closed(t');
-  decreases t;
-{
-  /* AppAbs */
-  if (t.tapp? && t.f.tabs? && value(t.arg)) {
-    assert t' == subst(t.f.x, t.arg, t.f.body);
-    lemma_app_closed(t.f, t.arg);
-    parallel (y:nat)
-      ensures !appears_free_in(y, t');
-    {
-      if (y==t.f.x) {
-        lemma_subst_afi'(y, t.arg, t.f.body);
-        assert !appears_free_in(y, t');
-      } else {
-        lemma_abs_closed(t.f.x, t.f.T, t.f.body, y);
-        assert !appears_free_in(y, t.f.body);
-        lemma_subst_afi''(t.f.x, t.arg, t.f.body, y);
-        assert !appears_free_in(y, t');
-      }
-    }
-    assert closed(t');
-  }
-  /* App1 */
-  else if (t.tapp? && step(t.f).Some?) {
-    assert t' == tapp(step(t.f).get, t.arg);
-    lemma_app_closed(t.f, t.arg);
-    lemma_step_preserves_closed(t.f, step(t.f).get);
-    assert closed(t');
-  }
-  /* App2 */
-  else if (t.tapp? && step(t.arg).Some?) {
-    assert t' == tapp(t.f, step(t.arg).get);
-    lemma_app_closed(t.f, t.arg);
-    lemma_step_preserves_closed(t.arg, step(t.arg).get);
-    assert closed(t');
-  }
-  /* IfTrue */
-  else if (t.tif? && t.c == ttrue) {
-    assert t' == t.a;
-    lemma_if_closed(t.c, t.a, t.b);
-    assert closed(t');
-  }
-  /* IfFalse */
-  else if (t.tif? && t.c == tfalse) {
-    assert t' == t.b;
-    lemma_if_closed(t.c, t.a, t.b);
-    assert closed(t');
-  }
-  /* If */
-  else if (t.tif? && step(t.c).Some?) {
-    assert t' == tif(step(t.c).get, t.a, t.b);
-    lemma_if_closed(t.c, t.a, t.b);
-    lemma_step_preserves_closed(t.c, step(t.c).get);
-    assert closed(t');
-  }
-}
-
-ghost method lemma_multistep_preserves_closed(t: tm, t': tm, i: nat)
-  requires closed(t);
-  requires mstep(t, t', i);
-  ensures closed(t');
-  decreases i;
-{
-  if (i > 0) {
-    lemma_step_preserves_closed(t, step(t).get);
-    lemma_multistep_preserves_closed(step(t).get, t', i-1);
-  }
-}
-
+// We separate out the app case, to avoid timeouts in the IDE.
 ghost method theorem_fundamental_R_app(c: partial_map<ty>, e: partial_map<tm>, k: nat, f: tm, arg: tm, Tf: ty, Targ: ty)
   requires E(Tf, msubst(e, f), k);
   requires E(Targ, msubst(e, arg), k);
@@ -1067,40 +992,25 @@ ghost method theorem_fundamental_R_app(c: partial_map<ty>, e: partial_map<tm>, k
     ensures V(T, t', j);
   {
     var f', fi := lemma_app_irred__f_mstep_irred(mf, marg, t', i);
-    //assert fi<=i && mstep(mf, f', fi) && irred(f');
     lemma_E(Tf, mf, k, fi, j+i-fi, f');
-    //assert V(Tf, f', j+i-fi);
     lemma_V_value(Tf, f', j+i-fi);
-    //assert value(f');
 
     lemma_mstep_app_f(mf, marg, f', fi);
-    //assert mstep(mt, t', i);
     lemma_mstep_trans'(mt, tapp(f', marg), t', fi, i);
-    //assert mstep(tapp(f', marg), t', i-fi);
 
     var arg', argi := lemma_app_irred__arg_mstep_irred(f', marg, t', i-fi);
-    //assert argi<=i && mstep(marg, arg', argi) && irred(arg');
     lemma_E(Targ, marg, k, argi, j+i-fi-argi, arg');
-    //assert V(Targ, arg', j+i-fi-argi);
     lemma_V_value(Targ, arg', j+i-fi-argi);
-    //assert value(arg');
 
-    //assert closed(marg);
     lemma_multistep_preserves_closed(marg, arg', argi);
-    //assert closed(arg');
 
     lemma_V_arrow(Targ, T, f'.x, f'.body, arg', j+i-fi, j+i-fi-argi);
-    //assert E(T, subst(f'.x, arg', f'.body), j+i-fi-argi);
 
-    //assert mstep(tapp(f', arg'), subst(f'.x, arg', f'.body), 1);
     lemma_mstep_app_arg(f', marg, arg', argi);
-    //assert mstep(tapp(f', marg), tapp(f', arg'), argi);
     lemma_mstep_trans'(tapp(f', marg), tapp(f', arg'), t', argi, i-fi);
     lemma_mstep_trans'(tapp(f', arg'), subst(f'.x, arg', f'.body), t', 1, i-fi-argi);
-    //assert mstep(subst(f'.x, arg', f'.body), t', i-fi-argi-1);
 
     lemma_E(T, subst(f'.x, arg', f'.body), j+i-fi-argi, i-fi-argi-1, j, t');
-    //assert V(T, t', j);
   }
   assert E(T, msubst(e, t), k);
 }
@@ -1121,31 +1031,21 @@ ghost method theorem_fundamental_R(c: partial_map<ty>, t: tm, T: ty)
       lemma_g_domains_match(c, e, k);
       lemma_msubst_var(e, id);
       lemma_g_V(c, e, k, id, lookup(id, e).get, T);
-      //assert E(T, msubst(e, t), k);
-      assert E(T, msubst(e, t), k);
     case tabs(x, T1, body) =>
-      //assert T.TArrow? && T.paramT==T1;
       var T2 := T.bodyT;
       var c' := Extend(x, T1, c);
-      //assert has_type(Context(c'), body) == Some(T2);
       theorem_fundamental_R(c', body, T2);
-      //assert R(c', body, T2);
       parallel (j:nat, v | j<=k && closed(v) && V(T1, v, j))
         ensures E(T2, subst(x, v, msubst(drop(x, e), body)), j);
       {
         var e' := Extend(x, v, e);
         lemma_g_monotonic_hack(c, e, k, j, c', body, T2);
-        //assert g(c', e', j);
-        //assert R(c', body, T2);
         lemma_R(c', e', j, body, T2);
-        //assert E(T2, msubst(e', body), j);
         lemma_g_env_closed(c', e', j);
         lemma_subst_msubst(e, x, v, body);
       }
-      //assert forall j:nat, v :: j<=k && closed(v) && V(T1, v, j) ==> E(T2, subst(x, v, msubst(drop(x, e), body)), j);
       assert E(T, tabs(x, T1, msubst(drop(x, e), body)), k);
       lemma_msubst_abs(e, x, T1, body);
-      assert E(T, msubst(e, t), k);
     case tapp(f, arg) =>
       var Tf := has_type(Context(c), f).get;
       var Targ := has_type(Context(c), arg).get;
@@ -1153,15 +1053,10 @@ ghost method theorem_fundamental_R(c: partial_map<ty>, t: tm, T: ty)
       theorem_fundamental_R(c, arg, Targ);
       lemma_g_msubst_closed(c, e, k, arg, Targ);
       theorem_fundamental_R_app(c, e, k, f, arg, Tf, Targ);
-      assert E(T, msubst(e, t), k);
     case ttrue =>
       lemma_msubst_true(e);
-      //assert msubst(e, ttrue) == ttrue;
-      assert E(T, msubst(e, t), k);
     case tfalse =>
       lemma_msubst_false(e);
-      //assert msubst(e, tfalse) == tfalse;
-      assert E(T, msubst(e, t), k);
     case tif(cond, a, b) =>
       theorem_fundamental_R(c, cond, TBool);
       theorem_fundamental_R(c, a, T);
@@ -1176,29 +1071,17 @@ ghost method theorem_fundamental_R(c: partial_map<ty>, t: tm, T: ty)
         ensures V(T, t', j);
       {
         var c', ci := lemma_if_irred__c_mstep_irred(mc, ma, mb, t', i);
-        //assert ci<=i && mstep(mc, c', ci) && irred(c');
         lemma_E(TBool, mc, k, ci, j, c');
-        //assert V(TBool, c', j);
-        //assert c' == ttrue || c' == tfalse;
         lemma_mstep_if_c(mc, ma, mb, c', ci);
-        //assert mstep(mt, t', i);
         lemma_mstep_trans'(mt, tif(c', ma, mb), t', ci, i);
-        //assert mstep(tif(c', ma, mb), t', i-ci);
         if (c' == ttrue) {
-          //assert step(tif(c', ma, mb)) == Some(ma);
           lemma_mstep_trans'(tif(c', ma, mb), ma, t', 1, i-ci);
-          //assert mstep(ma, t', i-ci-1);
           lemma_E(T, ma, k, i-ci-1, j, t');
-          //assert V(T, t', j);
         } else {
-          //assert step(tif(c', ma, mb)) == Some(mb);
           lemma_mstep_trans'(tif(c', ma, mb), mb, t', 1, i-ci);
-          //assert mstep(mb, t', i-ci-1);
           lemma_E(T, mb, k, i-ci-1, j, t');
-          //assert V(T, t', j);
         }
       }
-      assert E(T, msubst(e, t), k);
     }
   }
 }
@@ -1229,4 +1112,35 @@ ghost method corollary_type_safety(t: tm)
       }
     }
   }
+}
+
+// NOTE BUG: these _hack methods have unrelated clauses that are just required and ensured so that Dafny doesn't forget about them.
+
+ghost method lemma_g_monotonic_hack(c: partial_map<ty>, e: partial_map<tm>, k: nat, j: nat, c': partial_map<ty>, body: tm, T2: ty)
+  requires g(c, e, k);
+  requires j <= k;
+  ensures g(c, e, j);
+  requires R(c', body, T2);
+  ensures R(c', body, T2);
+{
+  lemma_g_monotonic(c, e, k, j);
+}
+
+ghost method lemma_g_monotonic_hack'(c: partial_map<ty>, e: partial_map<tm>, k: nat, j: nat, c': partial_map<ty>, body: tm, T2: ty)
+  requires g(c, e, k);
+  requires j <= k;
+  ensures g(c, e, j);
+  requires has_type(Context(c'), body) == Some(T2);
+  ensures has_type(Context(c'), body) == Some(T2);
+{
+  lemma_g_monotonic(c, e, k, j);
+}
+
+ghost method make_V0_hack(T: ty, c': partial_map<ty>, t': tm, T': ty) returns (v: tm)
+  ensures closed(v);
+  ensures V(T, v, 0);
+  requires has_type(Context(c'), t') == Some(T');
+  ensures has_type(Context(c'), t') == Some(T');
+{
+  v := make_V0(T);
 }
