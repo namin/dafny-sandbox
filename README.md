@@ -31,5 +31,12 @@ Beyond Software Foundations
   which is pleasant to work with (because of the cofinite
   quantification), so abandoning this attempt for now.
 
-* _Coming soon_: formalizing
-  [Amal Ahmed's Lectures on Logical Relations](http://www.cs.uoregon.edu/Activities/summerschool/summer12/curriculum.html).
+Step-Indexed Logical Relations
+------------------------------
+
+Step-indexed logical relations seem like a natural fit for Dafny. Hence,
+I am formalizing
+[Amal Ahmed's Lectures on Logical Relations](http://www.cs.uoregon.edu/Activities/summerschool/summer12/curriculum.html).
+
+* [Lr_Ts_Stlc.dfy](https://github.com/namin/dafny-sandbox/blob/master/Lr_Ts_Stlc.dfy):
+  Proof of type-safety of the STLC using step-indexed logical relations.
