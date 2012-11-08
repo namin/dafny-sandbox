@@ -1288,7 +1288,29 @@ ghost method lemma_R(c: partial_map<ty>, e: partial_map<tm>, k: nat, t: tm, T: t
 {
 }
 
-// We separate out the app case, to avoid timeouts in the IDE.
+// We separate out and break down the app case, to avoid timeouts in the IDE.
+ghost method theorem_fundamental_R_app_f(Tf: ty, mt: tm, mf: tm, marg: tm, t': tm, k: nat, i: nat, j: nat) returns (f': tm, fi: nat)
+  requires mstep(tapp(mf, marg), t', i);
+  requires mstep(mt, t', i);
+  requires mt==tapp(mf, marg);
+  requires irred(t');
+  requires E(Tf, mf, k);
+  requires i+j<k;
+  requires Tf.TArrow?;
+  ensures fi<=i;
+  ensures mstep(tapp(f', marg), t', i-fi);
+  ensures value(f');
+  ensures f'.tabs?;
+  ensures V(Tf, f', j+i-fi);
+{
+  f', fi := lemma_app_irred__f_mstep_irred(mf, marg, t', i);
+  lemma_E(Tf, mf, k, fi, j+i-fi, f');
+  lemma_V_value(Tf, f', j+i-fi);
+
+  lemma_mstep_app_f(mf, marg, f', fi);
+  lemma_mstep_trans'(mt, tapp(f', marg), t', fi, i);
+}
+
 ghost method theorem_fundamental_R_app(c: partial_map<ty>, e: partial_map<tm>, k: nat, f: tm, arg: tm, Tf: ty, Targ: ty)
   requires E(Tf, msubst(e, f), k);
   requires E(Targ, msubst(e, arg), k);
@@ -1306,12 +1328,7 @@ ghost method theorem_fundamental_R_app(c: partial_map<ty>, e: partial_map<tm>, k
   parallel (i:nat, j:nat, t' | i+j<k && mstep(mt, t', i) && irred(t'))
     ensures V(T, t', j);
   {
-    var f', fi := lemma_app_irred__f_mstep_irred(mf, marg, t', i);
-    lemma_E(Tf, mf, k, fi, j+i-fi, f');
-    lemma_V_value(Tf, f', j+i-fi);
-
-    lemma_mstep_app_f(mf, marg, f', fi);
-    lemma_mstep_trans'(mt, tapp(f', marg), t', fi, i);
+    var f', fi := theorem_fundamental_R_app_f(Tf, mt, mf, marg, t', k, i, j);
 
     var arg', argi := lemma_app_irred__arg_mstep_irred(f', marg, t', i-fi);
     lemma_E(Targ, marg, k, argi, j+i-fi-argi, arg');
