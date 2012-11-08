@@ -1,7 +1,7 @@
 // Proving Type-Safety of the Simply Typed Lambda-Calculus
 // with Iso-Recursive Types
 // using Step-Indexed Logical Relations
-// adapted from Lr_Tr_Stlc.dfy
+// adapted from Lr_Ts_Stlc.dfy
 
 datatype option<A> = None | Some(get: A);
 
