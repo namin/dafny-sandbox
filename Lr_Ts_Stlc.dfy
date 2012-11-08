@@ -779,6 +779,42 @@ predicate g(c: partial_map<ty>, e: partial_map<tm>, k: nat)
     case Extend(x', v, e') => x==x' && closed(v) && V(T, v, k) && g(c', e', k)
 }
 
+// For step-indexed logical relations, we need to verify that the relations are monotonic / downward closed.
+
+ghost method lemma_V_monotonic(T: ty, v: tm, k: nat, j: nat)
+  requires V(T, v, k);
+  requires j <= k;
+  ensures V(T, v, j);
+{
+}
+
+ghost method lemma_E_monotonic(T: ty, v: tm, k: nat, j: nat)
+  requires E(T, v, k);
+  requires j <= k;
+  ensures E(T, v, j);
+{
+  if (k > 0) {
+
+  }
+}
+
+ghost method lemma_g_monotonic(c: partial_map<ty>, e: partial_map<tm>, k: nat, j: nat)
+  requires g(c, e, k);
+  requires j <= k;
+  ensures g(c, e, j);
+{
+  match c {
+  case Empty =>
+  case Extend(x', T, c') =>
+    match e {
+    case Empty =>
+    case Extend(xe, v, e') =>
+      lemma_V_monotonic(T, v, k, j);
+      lemma_g_monotonic(c', e', k, j);
+    }
+  }
+}
+
 // Some properties of g_k(c, e), very similar to instantiation properties in Norm.dfy
 
 ghost method lemma_g_env_closed(c: partial_map<ty>, e: partial_map<tm>, k: nat)
@@ -846,42 +882,6 @@ ghost method lemma_g_domains_match(c: partial_map<ty>, e: partial_map<tm>, k: na
     ensures lookup(x, e).Some?;
   {
     lemma_g_domains_match_any(c, e, k, x);
-  }
-}
-
-// For step-indexed logical relations, we need to verify that the relations are monotonic / downward closed.
-
-ghost method lemma_V_monotonic(T: ty, v: tm, k: nat, j: nat)
-  requires V(T, v, k);
-  requires j <= k;
-  ensures V(T, v, j);
-{
-}
-
-ghost method lemma_E_monotonic(T: ty, v: tm, k: nat, j: nat)
-  requires E(T, v, k);
-  requires j <= k;
-  ensures E(T, v, j);
-{
-  if (k > 0) {
-
-  }
-}
-
-ghost method lemma_g_monotonic(c: partial_map<ty>, e: partial_map<tm>, k: nat, j: nat)
-  requires g(c, e, k);
-  requires j <= k;
-  ensures g(c, e, j);
-{
-  match c {
-  case Empty =>
-  case Extend(x', T, c') =>
-    match e {
-    case Empty =>
-    case Extend(xe, v, e') =>
-      lemma_V_monotonic(T, v, k, j);
-      lemma_g_monotonic(c', e', k, j);
-    }
   }
 }
 
