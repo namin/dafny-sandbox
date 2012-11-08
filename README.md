@@ -40,3 +40,7 @@ I am formalizing
 
 * [Lr_Ts_Stlc.dfy](https://github.com/namin/dafny-sandbox/blob/master/Lr_Ts_Stlc.dfy):
   Proof of type-safety of the STLC using step-indexed logical relations.
+
+* [Lr_Ts_Stlc_IsoRecTypes.dfy](https://github.com/namin/dafny-sandbox/blob/master/Lr_Ts_Stlc_IsoRecTypes.dfy):
+  Augment STLC with iso-recursive types (explicit `fold` and `unfold`).
+  The previous proof simply needs to be augmented as well. The old cases remain unchanged.
