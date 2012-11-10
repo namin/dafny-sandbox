@@ -1,10 +1,7 @@
 // Proving Type-Safety of the Simply Typed Lambda-Calculus using Logical Relations
+// Some parts taken from Stlc.dfy and Norm.dfy
 
-// --- BEGIN excerpt from Stlc.dfy ---
-
-// Utilities
 datatype option<A> = None | Some(get: A);
-
 
 // Syntax
 
@@ -37,14 +34,20 @@ function subst(x: nat, s: tm, t: tm): tm
 
 // Reduction
 function step(t: tm): option<tm>
+  decreases t;
 {
   /* AppAbs */     if (t.tapp? && t.f.tabs? && value(t.arg)) then Some(subst(t.f.x, t.arg, t.f.body))
   /* App1 */       else if (t.tapp? && step(t.f).Some?) then Some(tapp(step(t.f).get, t.arg))
-  /* App2 */       else if (t.tapp? && step(t.arg).Some?) then Some(tapp(t.f, step(t.arg).get))
+  /* App2 */       else if (t.tapp? && value(t.f) && step(t.arg).Some?) then Some(tapp(t.f, step(t.arg).get))
   /* IfTrue */     else if (t.tif? && t.c == ttrue) then Some(t.a)
   /* IfFalse */    else if (t.tif? && t.c == tfalse) then Some(t.b)
   /* If */         else if (t.tif? && step(t.c).Some?) then Some(tif(step(t.c).get, t.a, t.b))
                    else None
+}
+
+predicate irred(t: tm)
+{
+  step(t).None?
 }
 
 // Typing
@@ -92,13 +95,13 @@ function has_type(c: context, t: tm): option<ty>
 // Free Occurrences
 function appears_free_in(x: nat, t: tm): bool
 {
-  /* var */  (t.tvar? && t.id==x) ||
-  /* app1 */ (t.tapp? && appears_free_in(x, t.f)) ||
-  /* app2 */ (t.tapp? && appears_free_in(x, t.arg)) ||
-  /* abs */  (t.tabs? && t.x!=x && appears_free_in(x, t.body)) ||
-  /* if1 */  (t.tif? && appears_free_in(x, t.c)) ||
-  /* if2 */  (t.tif? && appears_free_in(x, t.a)) ||
-  /* if3 */  (t.tif? && appears_free_in(x, t.b))
+  /* var */    (t.tvar? && t.id==x) ||
+  /* app1 */   (t.tapp? && appears_free_in(x, t.f)) ||
+  /* app2 */   (t.tapp? && appears_free_in(x, t.arg)) ||
+  /* abs */    (t.tabs? && t.x!=x && appears_free_in(x, t.body)) ||
+  /* if1 */    (t.tif? && appears_free_in(x, t.c)) ||
+  /* if2 */    (t.tif? && appears_free_in(x, t.a)) ||
+  /* if3 */    (t.tif? && appears_free_in(x, t.b))
 }
 
 function closed(t: tm): bool
@@ -148,8 +151,6 @@ ghost method lemma_context_invariance(c: context, c': context, t: tm)
   }
 }
 
-// --- END excerpt from Stlc.dfy ---
-
 // Multistep
 
 function mstep(t: tm, t': tm, n: nat): bool
@@ -185,7 +186,6 @@ ghost method lemma_mstep_trans'(t1: tm, t2: tm, t3: tm, n12: nat, n13: nat)
     lemma_mstep_trans'(step(t1).get, t2, t3, n12-1, n13-1);
   }
 }
-
 
 ghost method lemma_mstep_if_c(c: tm, a: tm, b: tm, c': tm, ci: nat)
   requires mstep(c, c', ci);
@@ -360,7 +360,6 @@ ghost method lemma_abs_closed(x: nat, T: ty, t: tm, y: nat)
   }
 }
 
-
 ghost method lemma_subst_afi(x: nat, v: tm, t: tm, y: nat)
   requires closed(v);
   requires x!=y;
@@ -453,8 +452,6 @@ ghost method lemma_multistep_preserves_closed(t: tm, t': tm, i: nat)
     lemma_multistep_preserves_closed(step(t).get, t', i-1);
   }
 }
-
-// BEGIN excerpt Norm.dfy
 
 // Multisubstitutions, multi-extensions, and instantiations
 
@@ -670,7 +667,6 @@ ghost method lemma_multistep_App2(v: tm, t: tm, t': tm, n: nat)
     lemma_multistep_App2(v, step(t).get, t', n-1);
   }
 }
-// END excerpt Norm.dfy
 
 ghost method lemma_closed_env__closed_lookup(e: partial_map<tm>, x: nat)
   requires closed_env(e);
@@ -708,7 +704,7 @@ predicate type_safety(t: tm)
 
 // V_k(T, t) is by structural induction over T
 predicate V(T: ty, t: tm, k: nat)
-  decreases T, k;
+  decreases k, T;
 {
   match T
   case TBool => t==ttrue || t==tfalse
@@ -731,15 +727,10 @@ ghost method make_V0(T: ty) returns (v: tm)
 }
 
 predicate E(T: ty, t: tm, k: nat)
-  decreases T, k;
+  decreases k, T;
 {
   if (k == 0) then true
   else forall i:nat, j:nat, t' :: i+j<k ==> mstep(t, t', i) && irred(t') ==> V(T, t', j)
-}
-// where
-predicate irred(t: tm)
-{
-  step(t).None?
 }
 
 // Since Dafny </3 quantifiers, let's extract/repeat the relevant tidbits from the relations:
@@ -814,6 +805,7 @@ ghost method lemma_g_monotonic(c: partial_map<ty>, e: partial_map<tm>, k: nat, j
     }
   }
 }
+
 
 // Some properties of g_k(c, e), very similar to instantiation properties in Norm.dfy
 
@@ -973,7 +965,29 @@ ghost method lemma_R(c: partial_map<ty>, e: partial_map<tm>, k: nat, t: tm, T: t
 {
 }
 
-// We separate out the app case, to avoid timeouts in the IDE.
+// We separate out and break down the app case, to avoid timeouts in the IDE.
+ghost method theorem_fundamental_R_app_f(Tf: ty, mt: tm, mf: tm, marg: tm, t': tm, k: nat, i: nat, j: nat) returns (f': tm, fi: nat)
+  requires mstep(tapp(mf, marg), t', i);
+  requires mstep(mt, t', i);
+  requires mt==tapp(mf, marg);
+  requires irred(t');
+  requires E(Tf, mf, k);
+  requires i+j<k;
+  requires Tf.TArrow?;
+  ensures fi<=i;
+  ensures mstep(tapp(f', marg), t', i-fi);
+  ensures value(f');
+  ensures f'.tabs?;
+  ensures V(Tf, f', j+i-fi);
+{
+  f', fi := lemma_app_irred__f_mstep_irred(mf, marg, t', i);
+  lemma_E(Tf, mf, k, fi, j+i-fi, f');
+  lemma_V_value(Tf, f', j+i-fi);
+
+  lemma_mstep_app_f(mf, marg, f', fi);
+  lemma_mstep_trans'(mt, tapp(f', marg), t', fi, i);
+}
+
 ghost method theorem_fundamental_R_app(c: partial_map<ty>, e: partial_map<tm>, k: nat, f: tm, arg: tm, Tf: ty, Targ: ty)
   requires E(Tf, msubst(e, f), k);
   requires E(Targ, msubst(e, arg), k);
@@ -991,12 +1005,7 @@ ghost method theorem_fundamental_R_app(c: partial_map<ty>, e: partial_map<tm>, k
   parallel (i:nat, j:nat, t' | i+j<k && mstep(mt, t', i) && irred(t'))
     ensures V(T, t', j);
   {
-    var f', fi := lemma_app_irred__f_mstep_irred(mf, marg, t', i);
-    lemma_E(Tf, mf, k, fi, j+i-fi, f');
-    lemma_V_value(Tf, f', j+i-fi);
-
-    lemma_mstep_app_f(mf, marg, f', fi);
-    lemma_mstep_trans'(mt, tapp(f', marg), t', fi, i);
+    var f', fi := theorem_fundamental_R_app_f(Tf, mt, mf, marg, t', k, i, j);
 
     var arg', argi := lemma_app_irred__arg_mstep_irred(f', marg, t', i-fi);
     lemma_E(Targ, marg, k, argi, j+i-fi-argi, arg');
