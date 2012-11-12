@@ -187,6 +187,8 @@ ghost method lemma_mstep_trans'(t1: tm, t2: tm, t3: tm, n12: nat, n13: nat)
   }
 }
 
+// Congruence lemmas on multistep
+
 ghost method lemma_mstep_if_c(c: tm, a: tm, b: tm, c': tm, ci: nat)
   requires mstep(c, c', ci);
   ensures mstep(tif(c, a, b), tif(c', a, b), ci);
@@ -654,18 +656,6 @@ ghost method lemma_mextend_lookup(c: partial_map<ty>, x: nat)
 ghost method lemma_mextend_drop(c: partial_map<ty>, init: partial_map<ty>, x: nat, x': nat)
   ensures lookup(x', mextend(init, drop(x, c))) == if x==x' then lookup(x', init) else lookup(x', mextend(init, c));
 {
-}
-
-// Congruence lemmas on multistep
-ghost method lemma_multistep_App2(v: tm, t: tm, t': tm, n: nat)
-  requires value(v);
-  requires mstep(t, t', n);
-  ensures mstep(tapp(v, t), tapp(v, t'), n);
-  decreases n;
-{
-  if (n > 0) {
-    lemma_multistep_App2(v, step(t).get, t', n-1);
-  }
 }
 
 ghost method lemma_closed_env__closed_lookup(e: partial_map<tm>, x: nat)
