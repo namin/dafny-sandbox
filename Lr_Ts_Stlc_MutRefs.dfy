@@ -462,26 +462,6 @@ ghost method lemma_ref_closed(r: tm)
   }
 }
 
-// NOTE BUG: extra requires and ensures gets forgotten
-ghost method lemma_ref_closed_hack(r: tm, lst: list<tm>, lst': list<tm>)
-  requires closed(tref(r));
-  ensures closed(r);
-  requires lst' == snoc(lst, r);
-  ensures lst' == snoc(lst, r);
-{
-  assert lst' == snoc(lst, r);
-  if (!closed(r)) {
-    assert exists x:nat :: appears_free_in(x, r);
-    parallel (x:nat | appears_free_in(x, r))
-      ensures appears_free_in(x, tref(r));
-    {
-    }
-    assert exists x:nat :: appears_free_in(x, tref(r));
-    //assert false;
-  }
-  assert lst' == snoc(lst, r);
-}
-
 ghost method lemma_deref_closed(d: tm)
   requires closed(tderef(d));
   ensures closed(d);
@@ -518,33 +498,6 @@ ghost method lemma_assign_closed(lhs: tm, rhs: tm)
     }
     assert exists x:nat :: appears_free_in(x, tassign(lhs, rhs));
     assert false;
-  }
-}
-
-// NOTE BUG: another one of those forgotten unrelated statements.
-ghost method lemma_assign_closed_hack(lhs: tm, rhs: tm, l: nat, lst: list<tm>, s': store)
-  requires closed(tassign(lhs, rhs));
-  ensures closed(lhs) && closed(rhs);
-  requires s' == Store(replace(l, rhs, lst));
-  ensures s' == Store(replace(l, rhs, lst));
-{
-  if (!closed(lhs)) {
-    assert exists x:nat :: appears_free_in(x, lhs);
-    parallel (x:nat | appears_free_in(x, lhs))
-      ensures appears_free_in(x, tassign(lhs, rhs));
-    {
-    }
-    assert exists x:nat :: appears_free_in(x, tassign(lhs, rhs));
-    //assert false;
-  }
-  if (!closed(rhs)) {
-    assert exists x:nat :: appears_free_in(x, rhs);
-    parallel (x:nat | appears_free_in(x, rhs))
-      ensures appears_free_in(x, tassign(lhs, rhs));
-    {
-    }
-    assert exists x:nat :: appears_free_in(x, tassign(lhs, rhs));
-    //assert false;
   }
 }
 
@@ -628,26 +581,6 @@ ghost method lemma_closed_tm_list_snoc(lst: list<tm>, v: tm)
   }
 }
 
-// NOTE BUG: extra requires and ensures get forgotten
-ghost method lemma_closed_tm_list_snoc_hack(lst: list<tm>, v: tm, lst': list<tm>)
-  requires closed_tm_list(lst);
-  requires closed(v);
-  ensures closed_tm_list(snoc(lst, v)); 
-  requires lst' == snoc(lst, v);
-  ensures lst' == snoc(lst, v);
-{
-  assert lst' == snoc(lst, v);
-  if (lst.Nil?) {
-    assert closed_tm_list(Cons(v, Nil));
-    assert closed_tm_list(snoc(lst, v));
-  }
-  if (lst.Cons?) {
-    lemma_closed_tm_list_snoc_hack(lst.tail, v, snoc(lst.tail, v));
-    assert closed_tm_list(snoc(lst, v));
-  }
-  assert lst' == snoc(lst, v);
-}
-
 // NOTE BUG: really weird "proof" -- why is it needed?
 ghost method lemma_closed_tm_list_replace(lst: list<tm>, l: nat, v: tm)
   requires closed_tm_list(lst);
@@ -656,28 +589,6 @@ ghost method lemma_closed_tm_list_replace(lst: list<tm>, l: nat, v: tm)
 {
   if (lst.Cons?) {
     if (l>0) {
-      assert closed_tm_list(replace(l, v, lst));
-    } else {
-      assert closed_tm_list(replace(l, v, lst));
-    }
-  } else {
-    assert closed_tm_list(replace(l, v, lst));
-  }
-}
-
-// NOTE BUG: another one...
-ghost method lemma_closed_tm_list_replace_hack(lst: list<tm>, l: nat, v: tm, lst': list<tm>)
-  requires closed_tm_list(lst);
-  requires closed(v);
-  ensures closed_tm_list(replace(l, v, lst));
-  requires lst' == replace(l, v, lst);
-  ensures lst' == replace(l, v, lst);
-{
-  if (lst.Cons?) {
-    if (l>0) {
-      assert lst' == replace(l, v, lst);
-      assert lst' == Cons(lst.head, replace(l-1, v, lst.tail));
-      lemma_closed_tm_list_replace_hack(lst.tail, l-1, v, replace(l-1, v, lst.tail));
       assert closed_tm_list(replace(l, v, lst));
     } else {
       assert closed_tm_list(replace(l, v, lst));
@@ -751,8 +662,8 @@ ghost method lemma_step_preserves_closed(t: tm, s: store, t': tm, s': store)
 	  assert s' == Store(lst');
     assert lst' == snoc(s.lst, t.r);
 
-    lemma_ref_closed_hack(t.r, s.lst, lst');
-    lemma_closed_tm_list_snoc_hack(s.lst, t.r, lst');
+    lemma_ref_closed(t.r);
+    lemma_closed_tm_list_snoc(s.lst, t.r);
     lemma_closed_tm_list__closed_store(lst');
 
 	  assert closed(t');
@@ -782,8 +693,8 @@ ghost method lemma_step_preserves_closed(t: tm, s: store, t': tm, s': store)
     var lst' := replace(t.lhs.l, t.rhs, s.lst);
     assert s' == Store(lst');
 
-    lemma_assign_closed_hack(t.lhs, t.rhs, t.lhs.l, s.lst, s');
-    lemma_closed_tm_list_replace_hack(s.lst, t.lhs.l, t.rhs, lst');
+    lemma_assign_closed(t.lhs, t.rhs);
+    lemma_closed_tm_list_replace(s.lst, t.lhs.l, t.rhs);
 
 	  assert closed(t');
     assert closed_store(s');
@@ -802,19 +713,6 @@ ghost method lemma_step_preserves_closed(t: tm, s: store, t': tm, s': store)
   }
 }
 
-// NOTE BUG: YAO.
-ghost method lemma_step_preserves_closed_hack(t: tm, s: store, t': tm, s': store, t'': tm, s'': store, i: nat)
-  requires closed_store(s);
-  requires closed(t);
-  requires step(t, s) == Some(P(t', s'));
-  ensures closed(t');
-  ensures closed_store(s');
-  requires mstep(t', s', t'', s'', i);
-  ensures mstep(t', s', t'', s'', i);
-{
-  lemma_step_preserves_closed(t, s, t', s');
-}
-
 ghost method lemma_multistep_preserves_closed(t: tm, s: store, t': tm, s': store, i: nat)
   requires closed_store(s);
   requires closed(t);
@@ -824,7 +722,7 @@ ghost method lemma_multistep_preserves_closed(t: tm, s: store, t': tm, s': store
   decreases i;
 {
   if (i > 0) {
-    lemma_step_preserves_closed_hack(t, s, step(t, s).get.fst, step(t, s).get.snd, t', s', i-1);
+    lemma_step_preserves_closed(t, s, step(t, s).get.fst, step(t, s).get.snd);
     lemma_multistep_preserves_closed(step(t, s).get.fst, step(t, s).get.snd, t', s', i-1);
   }
 }
