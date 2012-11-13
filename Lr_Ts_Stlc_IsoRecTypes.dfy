@@ -1231,8 +1231,8 @@ ghost method lemma_g_msubst_closed(c: partial_map<ty>, e: partial_map<tm>, k: na
     lemma_closed_env__closed_lookup(e, id);
   case tabs(x, T1, body) =>
     var c' := Extend(x, T1, c);
-    lemma_g_monotonic_hack'(c, e, k, 0, c', body, T.bodyT);
-    var v := make_V0_hack(T1, c', body, T.bodyT);
+    lemma_g_monotonic(c, e, k, 0);
+    var v := make_V0(T1);
     var e' := Extend(x, v, e);
     lemma_g_msubst_closed(c', e', 0, body, T.bodyT);
     lemma_g_env_closed(c, e, k);
@@ -1362,7 +1362,7 @@ ghost method theorem_fundamental_R(c: partial_map<ty>, t: tm, T: ty)
         ensures E(T2, subst(x, v, msubst(drop(x, e), body)), j);
       {
         var e' := Extend(x, v, e);
-        lemma_g_monotonic_hack(c, e, k, j, c', body, T2);
+        lemma_g_monotonic(c, e, k, j);
         lemma_R(c', e', j, body, T2);
         lemma_g_env_closed(c', e', j);
         lemma_subst_msubst(e, x, v, body);
@@ -1468,38 +1468,4 @@ ghost method corollary_type_safety(t: tm)
       }
     }
   }
-}
-
-// NOTE BUG: these _hack methods have unrelated clauses that are just required and ensured so that Dafny doesn't forget about them.
-
-ghost method lemma_g_monotonic_hack(c: partial_map<ty>, e: partial_map<tm>, k: nat, j: nat, c': partial_map<ty>, body: tm, T2: ty)
-  requires g(c, e, k);
-  requires j <= k;
-  ensures g(c, e, j);
-  requires R(c', body, T2);
-  ensures R(c', body, T2);
-{
-  lemma_g_monotonic(c, e, k, j);
-}
-
-ghost method lemma_g_monotonic_hack'(c: partial_map<ty>, e: partial_map<tm>, k: nat, j: nat, c': partial_map<ty>, body: tm, T2: ty)
-  requires g(c, e, k);
-  requires j <= k;
-  ensures g(c, e, j);
-  requires ty_closed_ctx(c');
-  requires has_type(Context(c'), body) == Some(T2);
-  ensures has_type(Context(c'), body) == Some(T2);
-{
-  lemma_g_monotonic(c, e, k, j);
-}
-
-ghost method make_V0_hack(T: ty, c': partial_map<ty>, t': tm, T': ty) returns (v: tm)
-  requires ty_closed(T);
-  ensures closed(v);
-  ensures V(T, v, 0);
-  requires ty_closed_ctx(c');
-  requires has_type(Context(c'), t') == Some(T');
-  ensures has_type(Context(c'), t') == Some(T');
-{
-  v := make_V0(T);
 }
