@@ -53,7 +53,7 @@ function length<T>(lst: list<T>): nat
   case Nil => 0
   case Cons(head, tail) => 1+length(tail)
 }
-function nth<T>(n: nat, lst: list<tm>, d: tm): tm
+function nth<T>(n: nat, lst: list<T>, d: T): T
 {
   match lst
   case Nil => d
@@ -955,4 +955,79 @@ predicate type_safety(t: tm)
   forall t', s', n:nat :: mstep(t, Store(Nil), t', s', n) ==>
   value(t') || step(t', s').Some?
 }
-// TODO: Proof
+
+// TODO: complete proof
+
+class typ {
+  predicate contains(k: nat, psi: seq<typ>, v: tm)
+}
+predicate approx_typ(k: nat, typ: typ, typk: typ)
+  requires typ != null;
+  requires typk != null;
+{
+  forall j:nat, psi, v :: typk.contains(j, psi, v) <==> j < k && typ.contains(j, psi, v)
+}
+predicate approx_storetyp(k: nat, psi: seq<typ>, psik: seq<typ>)
+  requires forall typ :: typ in psi ==> typ != null;
+{
+  |psi| == |psik| && (forall typ :: typ in psik ==> typ != null) && 
+  forall i :: 0 <= i < |psik| ==> approx_typ(k, psi[i], psik[i])
+}
+predicate world_ok(n: nat, k: nat, psi: seq<typ>)
+  decreases n, k;
+{
+  k < n && storetyp_ok(k, psi)
+}
+predicate storetyp_ok(n: nat, psi: seq<typ>)
+{
+  forall typ :: typ in psi ==> typ_ok(n, typ)
+}
+predicate storetyp_extension(k: nat, psik: seq<typ>, j: nat, psij: seq<typ>)
+{
+ ((forall typ :: typ in psik ==> typ != null) && (forall typ :: typ in psij ==> typ != null)) && (
+ (j == k && psik == psij) || 
+ (j < k && |psik| <= |psij| &&
+  forall apsik, apsij ::
+  approx_storetyp(j, psik, apsik) && approx_storetyp(j, psij, apsij) ==>
+  forall i :: 0 <= i < |psik| ==> apsik[i] == apsij[i]))
+}
+predicate typ_ok(n: nat, typ: typ)
+  decreases n;
+{
+  typ != null &&
+  forall k:nat, psik, j:nat, psij :: k<n && j<n ==>
+  storetyp_extension(k, psik, j, psij) ==>
+  forall v :: typ.contains(k, psik, v) ==> typ.contains(j, psij, v)
+}
+predicate store_storetyp_ok(s: store, k: nat, psi: seq<typ>)
+{
+  length(s.lst) == |psi| &&
+  forall j:nat, psij :: storetyp_ok(j, psij) && storetyp_extension(k, psi, j, psij) ==>
+  forall i :: 0 <= i < |psi| ==>
+  psi[i].contains(j, psij, nth(i, s.lst, tunit))
+}
+
+predicate V(T: ty, t: tm, k: nat, psi: seq<typ>)
+  requires storetyp_ok(k, psi);
+  decreases k, T;
+{
+  match T
+  case TUnit => t==tunit
+  case TBool => t==ttrue || t==tfalse
+  case TArrow(T1, T2) => t.tabs? && (
+       forall j:nat, psij, v :: storetyp_ok(j, psij) && storetyp_extension(k, psi, j, psij) ==>
+       closed(v) && V(T1, v, j, psij) ==> E(T2, subst(t.x, v, t.body), j, psij))
+  case TRef(ty) => t.tloc? && (k==0 || (
+       forall psi1 :: storetyp_ok(k-1, psi1) && storetyp_extension(k, psi, k-1, psi1) ==>
+       t.l < |psi| && forall v :: psi[t.l].contains(k-1, psi1, v) == V(ty, v, k-1, psi1)))
+}
+
+predicate E(T: ty, t: tm, k: nat, psi: seq<typ>)
+  decreases k, T;
+{
+  if (k==0) then true
+  else forall i:nat, j:nat, s, t', s' :: i+j<k && store_storetyp_ok(s, k, psi) &&
+       mstep(t, s, t', s', j) && irred(t', s') ==> exists psi' :: storetyp_ok(k-j, psi') &&
+       storetyp_extension(k, psi, i, psi') && store_storetyp_ok(s', i, psi') &&
+       V(T, t', i, psi')
+}
