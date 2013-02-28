@@ -248,6 +248,64 @@ ghost method lemma_store_extend_extends<A>(st: store<A>, t: A)
   ensures store_extends(store_extend(st, t), st);
 {
 }
+ghost method lemma_store_invariance(G: context, ST: store<ty>, ST': store<ty>, t: tm, T: ty)
+  requires store_extends(ST', ST);
+  requires has_type(G, ST, t) == Some(T);
+  ensures has_type(G, ST', t) == Some(T);
+  decreases t;
+{
+  if (t.tabs?) {
+    lemma_store_invariance(context_extend(G, t.x, t.T), ST, ST', t.body, T.returnT);
+  } else if (t.tapp?) {
+    var Tf :| has_type(G, ST, t.f) == Some(Tf);
+    var Targ :| has_type(G, ST, t.arg) == Some(Targ);
+    lemma_store_invariance(G, ST, ST', t.f, Tf);
+    lemma_store_invariance(G, ST, ST', t.arg, Targ);
+  } else if (t.tif0?) {
+    lemma_store_invariance(G, ST, ST', t.c, TNat);
+    lemma_store_invariance(G, ST, ST', t.a, T);
+    lemma_store_invariance(G, ST, ST', t.b, T);
+  } else if (t.tref?) {
+    var Tv :| has_type(G, ST, t.v) == Some(Tv);
+    lemma_store_invariance(G, ST, ST', t.v, Tv);
+  } else if (t.tderef?) {
+    var Tcell :| has_type(G, ST, t.cell) == Some(Tcell);
+    lemma_store_invariance(G, ST, ST', t.cell, Tcell);
+  } else if (t.tassign?) {
+    var Tlhs :| has_type(G, ST, t.lhs) == Some(Tlhs);
+    var Trhs :| has_type(G, ST, t.rhs) == Some(Trhs);
+    lemma_store_invariance(G, ST, ST', t.lhs, Tlhs);
+    lemma_store_invariance(G, ST, ST', t.rhs, Trhs);
+  } else {
+  }
+}
+ghost method lemma_store_extends_well_typed(ST: store<ty>, st: store<tm>, t: tm, T: ty)
+  requires store_well_typed(ST, st);
+  requires has_type(Context([]), ST, t) == Some(T);
+  requires value(t);
+  ensures store_well_typed(store_extend(ST, T), store_extend(st, t));
+{
+  assert |store_extend(ST, T).m| == |store_extend(st, t).m|;
+  var ST' := store_extend(ST, T);
+  var st' := store_extend(st, t);
+  assert |st'.m| == |st.m|+1;
+  parallel (l:nat | l < |st'.m|) ensures has_type(Context([]), ST', store_lookup(l, st')) == Some(store_lookup(l, ST'));
+  {
+    if (l == |st.m|) {
+      assert store_lookup(l, st') == t;
+      assert store_lookup(l, ST') == T;
+      lemma_store_invariance(Context([]), ST, ST', t, T);
+      assert has_type(Context([]), ST', store_lookup(l, st')) == Some(store_lookup(l, ST'));
+    } else {
+      assert l < |st.m|;
+      assert has_type(Context([]), ST, store_lookup(l, st)) == Some(store_lookup(l, ST));
+      assert store_lookup(l, st') == store_lookup(l, st);
+      assert store_lookup(l, ST') == store_lookup(l, ST);
+      lemma_store_invariance(Context([]), ST, ST', store_lookup(l, st), store_lookup(l, ST));
+      assert has_type(Context([]), ST', store_lookup(l, st')) == Some(store_lookup(l, ST'));
+    }
+  }
+}
 
 // Preservation 
 predicate preservation(ST: store<ty>, t: tm, t': tm, T: ty, st: store<tm>, st': store<tm>)
@@ -383,4 +441,97 @@ ghost method lemma_substitution_preserves_typing(G: context, ST: store<ty>, x: n
   }
 }
 
-// TODO ... to be continued at Assignment Preserves Store Typing
+// Assignment Preserves Store Typing
+ghost method lemma_assign_pres_store_typing(ST: store<ty>, st: store<tm>, l: nat, t: tm)
+  requires l < |st.m|;
+  requires store_well_typed(ST, st);
+  requires has_type(Context([]), ST, t) == Some(store_lookup(l, ST));
+  ensures store_well_typed(ST, store_replace(l, t, st));
+{
+  assert |ST.m| == |st.m|;
+  assert |ST.m| == |store_replace(l, t, st).m|;
+}
+
+ghost method theorem_preservation(ST: store<ty>, t: tm, t': tm, T: ty, st: store<tm>, st': store<tm>) returns (ST': store<ty>)
+  requires has_type(Context([]), ST, t)==Some(T);
+  requires store_well_typed(ST, st);
+  requires step(t, st) == Some(P(t', st'));
+  ensures store_extends(ST', ST);
+  ensures has_type(Context([]), ST', t')==Some(T);
+  ensures store_well_typed(ST', st');
+{
+  ST' := ST;
+  /* AppAbs */     if (t.tapp? && t.f.tabs? && value(t.arg)) {
+    assert t' == subst(t.f.x, t.arg, t.f.body);
+    assert st' == st;
+    var Tf :| has_type(Context([]), ST, t.f) == Some(Tf);
+    lemma_substitution_preserves_typing(Context([]), ST, t.f.x, t.arg, Tf.paramT, t.f.body, Tf.returnT);
+  }
+  /* App1 */       else if (t.tapp? && step(t.f,st).Some?) {
+    var Tf :| has_type(Context([]), ST, t.f) == Some(Tf);
+    ST' := theorem_preservation(ST, t.f, step(t.f, st).get.fst, Tf, st, step(t.f, st).get.snd);
+    var Targ :| has_type(Context([]), ST, t.arg) == Some(Targ);
+    lemma_store_invariance(Context([]), ST, ST', t.arg, Targ);
+  }
+  /* App2 */       else if (t.tapp? && value(t.f) && step(t.arg,st).Some?) {
+    var Targ :| has_type(Context([]), ST, t.arg) == Some(Targ);
+    ST' := theorem_preservation(ST, t.arg, step(t.arg, st).get.fst, Targ, st, step(t.arg, st).get.snd);
+    var Tf :| has_type(Context([]), ST, t.f) == Some(Tf);
+    lemma_store_invariance(Context([]), ST, ST', t.f, Tf);
+  }
+  /* SuccNat */    else if (t.tsucc? && t.pn.tnat?) {}//then Some(P(tnat(t.pn.n+1),st))
+  /* Succ */       else if (t.tsucc? && step(t.pn,st).Some?) {
+    ST' := theorem_preservation(ST, t.pn, step(t.pn, st).get.fst, TNat, st, step(t.pn, st).get.snd);
+  }
+  /* PredNat */    else if (t.tpred? && t.sn.tnat?) {}//then Some(P(tnat(if (t.sn.n==0) then 0 else t.sn.n-1),st))
+  /* Pred */       else if (t.tpred? && step(t.sn,st).Some?) {
+    ST' := theorem_preservation(ST, t.sn, step(t.sn, st).get.fst, TNat, st, step(t.sn, st).get.snd);
+  }
+  /* MultNats */   else if (t.tmult? && t.n1.tnat? && t.n2.tnat?) {}//then Some(P(tnat(t.n1.n*t.n2.n),st))
+  /* Mult1 */      else if (t.tmult? && step(t.n1, st).Some?) {
+    ST' := theorem_preservation(ST, t.n1, step(t.n1, st).get.fst, TNat, st, step(t.n1, st).get.snd);
+    lemma_store_invariance(Context([]), ST, ST', t.n2, TNat);
+  }
+  /* Mult2 */      else if (t.tmult? && value(t.n1) && step(t.n2, st).Some?) {
+    ST' := theorem_preservation(ST, t.n2, step(t.n2, st).get.fst, TNat, st, step(t.n2, st).get.snd);
+    lemma_store_invariance(Context([]), ST, ST', t.n1, TNat);
+  }
+  /* If0 */        else if (t.tif0? && step(t.c, st).Some?) {
+    ST' := theorem_preservation(ST, t.c, step(t.c, st).get.fst, TNat, st, step(t.c, st).get.snd);
+    lemma_store_invariance(Context([]), ST, ST', t.a, T);
+    lemma_store_invariance(Context([]), ST, ST', t.b, T);
+  }
+  /* If0_Zero */   else if (t.tif0? && t.c.tnat? && t.c.n==0) {}//then Some(P(t.a, st))
+  /* If0_NonZero */else if (t.tif0? && t.c.tnat? && t.c.n!=0) {}//then Some(P(t.b, st))
+  /* RefValue */   else if (t.tref? && value(t.v)) {
+    assert t' == tloc(|st.m|);
+    assert st' == store_extend(st, t.v);
+    var Tv :| has_type(Context([]), ST, t.v) == Some(Tv);
+    ST' := store_extend(ST, Tv);
+    lemma_store_invariance(Context([]), ST, ST', t.v, Tv);
+    lemma_store_extends_well_typed(ST, st, t.v, Tv);
+  }
+  /* Ref */        else if (t.tref? && step(t.v, st).Some?) {
+    var Tv :| has_type(Context([]), ST, t.v) == Some(Tv);
+    ST' := theorem_preservation(ST, t.v, step(t.v, st).get.fst, Tv, st, step(t.v, st).get.snd);
+  }
+  /* DerefLoc */   else if (t.tderef? && t.cell.tloc? && t.cell.l < |st.m|) {}//then Some(P(store_lookup(t.cell.l, st), st))
+  /* Deref */      else if (t.tderef? && step(t.cell, st).Some?) {
+    var Tcell :| has_type(Context([]), ST, t.cell) == Some(Tcell);
+    ST' := theorem_preservation(ST, t.cell, step(t.cell, st).get.fst, Tcell, st, step(t.cell, st).get.snd);
+  }
+  /* Assign */     else if (t.tassign? && t.lhs.tloc? && value(t.rhs) && t.lhs.l < |st.m|) {}//then Some(P(tunit, store_replace(t.lhs.l, t.rhs, st)))
+  /* Assign1 */    else if (t.tassign? && step(t.lhs, st).Some?) {
+    var Tlhs :| has_type(Context([]), ST, t.lhs) == Some(Tlhs);
+    ST' := theorem_preservation(ST, t.lhs, step(t.lhs, st).get.fst, Tlhs, st, step(t.lhs, st).get.snd);
+    var Trhs :| has_type(Context([]), ST, t.rhs) == Some(Trhs);
+    lemma_store_invariance(Context([]), ST, ST', t.rhs, Trhs);
+  }
+  /* Assign2 */    else if (t.tassign? && value(t.lhs) && step(t.rhs, st).Some?) {
+    var Trhs :| has_type(Context([]), ST, t.rhs) == Some(Trhs);
+    ST' := theorem_preservation(ST, t.rhs, step(t.rhs, st).get.fst, Trhs, st, step(t.rhs, st).get.snd);
+    var Tlhs :| has_type(Context([]), ST, t.lhs) == Some(Tlhs);
+    lemma_store_invariance(Context([]), ST, ST', t.lhs, Tlhs);
+  }
+                   else {}
+}
