@@ -472,7 +472,7 @@ ghost method theorem_progress(ST: store<ty>, t: tm, st: store<tm>)
 {
 }
 
-// Alternate formulation of progress theorem, which Danfy doesn't auto-prove.
+// Alternate formulation of progress theorem, which Dafny doesn't auto-prove.
 ghost method theorem_progress'(ST: store<ty>, t: tm, T: ty, st: store<tm>)
   requires has_type(Context([]), ST, t) == Some(T);
   requires store_well_typed(ST, st);
