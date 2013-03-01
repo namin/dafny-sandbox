@@ -122,7 +122,7 @@ function step(t: tm, st: store<tm>): option<pair<tm, store<tm>>>
                    else None
 }
 
-function mstep(t: tm, s: store<tm>, t': tm, s': store<tm>, n: nat): bool
+predicate mstep(t: tm, s: store<tm>, t': tm, s': store<tm>, n: nat)
   decreases n;
 {
   if (n==0) then t == t' && s == s'
@@ -534,4 +534,38 @@ ghost method theorem_preservation(ST: store<ty>, t: tm, t': tm, T: ty, st: store
     lemma_store_invariance(Context([]), ST, ST', t.lhs, Tlhs);
   }
                    else {}
+}
+
+// Progress
+ghost method theorem_progress(ST: store<ty>, t: tm, st: store<tm>)
+  requires has_type(Context([]), ST, t).Some?;
+  requires store_well_typed(ST, st);
+  ensures value(t) || step(t, st).Some?;
+{
+}
+
+// Type Soundness
+predicate normal_form(t: tm, st: store<tm>)
+{
+  step(t, st).None?
+}
+
+predicate stuck(t: tm, st: store<tm>)
+{
+  normal_form(t, st) && !value(t)
+}
+
+ghost method corollary_soundness(ST: store<ty>, t: tm, t': tm, st: store<tm>, st': store<tm>, T: ty, n: nat)
+  requires store_well_typed(ST, st);
+  requires has_type(Context([]), ST, t) == Some(T);
+  requires mstep(t, st, t', st', n);
+  ensures !stuck(t', st');
+  decreases n;
+{
+  theorem_progress(ST, t, st);
+  if (t == t' && st == st') {
+  } else {
+   var ST' := theorem_preservation(ST, t, step(t, st).get.fst, T, st, step(t, st).get.snd);
+   corollary_soundness(ST', step(t, st).get.fst, t', step(t, st).get.snd, st', T, n-1);
+  }
 }
