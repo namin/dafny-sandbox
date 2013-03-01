@@ -61,13 +61,11 @@ function subst(x: nat, s: tm, t: tm): tm
 
 // Stores
 datatype store<A> = Store(m: seq<A>);
-
 function store_lookup<A>(n: nat, st: store<A>): A
   requires n < |st.m|;
 {
   st.m[n]
 }
-
 function store_extend<A>(st: store<A>, t: A): store<A>
   ensures |st.m|+1 == |store_extend(st, t).m|;
   ensures forall n:nat :: n < |st.m| ==> store_lookup(n, st) == store_lookup(n, store_extend(st, t));
@@ -75,25 +73,9 @@ function store_extend<A>(st: store<A>, t: A): store<A>
 {
   Store(st.m + [t])
 }
-
 function store_replace<A>(n: nat, t: A, st: store<A>): store<A>
 {
   if (n >= |st.m|) then st else Store(st.m[0..n] + [t] + st.m[n+1..])
-}
-
-ghost method lemma_store_replace_nil<A>(n: nat, t: A)
-  ensures store_replace(n, t, Store([])) == Store([]);
-{
-}
-ghost method lemma_store_length_replace<A>(n: nat, t: A, st: store<A>)
-  ensures |store_replace(n, t, st).m| == |st.m|;
-{
-}
-ghost method lemma_store_lookup_replace_neq<A>(n1: nat, n2: nat, t: A, st: store<A>)
-  requires n1 < |st.m| && n2 < |st.m|;
-  requires n1 != n2;
-  ensures store_lookup(n1, store_replace(n2, t, st)) == store_lookup(n1, st);
-{
 }
 
 // Reduction
@@ -127,33 +109,6 @@ predicate mstep(t: tm, s: store<tm>, t': tm, s': store<tm>, n: nat)
 {
   if (n==0) then t == t' && s == s'
   else step(t, s).Some? && mstep(step(t, s).get.fst, step(t, s).get.snd, t', s', n-1)
-}
-
-// Properties of multistep
-
-ghost method lemma_mstep_trans(t1: tm, s1: store<tm>, t2: tm, s2: store<tm>, t3: tm, s3: store<tm>, n12: nat, n23: nat)
-  requires mstep(t1, s1, t2, s2, n12);
-  requires mstep(t2, s2, t3, s3, n23);
-  ensures mstep(t1, s1, t3, s3, n12+n23);
-  decreases n12+n23;
-{
-  if (n12>0) {
-    lemma_mstep_trans(step(t1, s1).get.fst, step(t1, s1).get.snd, t2, s2, t3, s3, n12-1, n23);
-  } else if (n23>0) {
-    lemma_mstep_trans(step(t1, s1).get.fst, step(t1, s1).get.snd, step(t2, s2).get.fst, step(t2, s2).get.snd, t3, s3, n12, n23-1);
-  }
-}
-
-ghost method lemma_mstep_trans'(t1: tm, s1: store<tm>, t2: tm, s2: store<tm>, t3: tm, s3: store<tm>, n12: nat, n13: nat)
-  requires n12 <= n13;
-  requires mstep(t1, s1, t2, s2, n12);
-  requires mstep(t1, s1, t3, s3, n13);
-  ensures mstep(t2, s2, t3, s3, n13-n12);
-  decreases n12;
-{
-  if (n12>0 && n13>0) {
-    lemma_mstep_trans'(step(t1, s1).get.fst, step(t1, s1).get.snd, t2, s2, t3, s3, n12-1, n13-1);
-  }
 }
 
 // ------
@@ -226,28 +181,12 @@ predicate store_well_typed(ST: store<ty>, st: store<tm>)
   |ST.m| == |st.m| &&
   (forall l:nat :: l < |st.m| ==> has_type(Context([]), ST, store_lookup(l, st)) == Some(store_lookup(l, ST)))
 }
-
 predicate store_extends<A>(st': store<A>, st: store<A>)
 {
   |st.m|<=|st'.m| && forall l:nat :: l < |st.m| ==> st.m[l]==st'.m[l]
 }
 
-ghost method lemma_store_extends_lookup<A>(l: nat, st: store, st': store)
-  requires l < |st.m|;
-  requires store_extends(st', st);
-  ensures store_lookup(l, st') == store_lookup(l, st);
-{
-}
-ghost method lemma_length_extends(l: nat, st: store, st': store)
-  requires l < |st.m|;
-  requires store_extends(st', st);
-  ensures l < |st'.m|;
-{
-}
-ghost method lemma_store_extend_extends<A>(st: store<A>, t: A)
-  ensures store_extends(store_extend(st, t), st);
-{
-}
+
 ghost method lemma_store_invariance(G: context, ST: store<ty>, ST': store<ty>, t: tm, T: ty)
   requires store_extends(ST', ST);
   requires has_type(G, ST, t) == Some(T);
@@ -441,17 +380,6 @@ ghost method lemma_substitution_preserves_typing(G: context, ST: store<ty>, x: n
   }
 }
 
-// Assignment Preserves Store Typing
-ghost method lemma_assign_pres_store_typing(ST: store<ty>, st: store<tm>, l: nat, t: tm)
-  requires l < |st.m|;
-  requires store_well_typed(ST, st);
-  requires has_type(Context([]), ST, t) == Some(store_lookup(l, ST));
-  ensures store_well_typed(ST, store_replace(l, t, st));
-{
-  assert |ST.m| == |st.m|;
-  assert |ST.m| == |store_replace(l, t, st).m|;
-}
-
 ghost method theorem_preservation(ST: store<ty>, t: tm, t': tm, T: ty, st: store<tm>, st': store<tm>) returns (ST': store<ty>)
   requires has_type(Context([]), ST, t)==Some(T);
   requires store_well_typed(ST, st);
@@ -545,6 +473,7 @@ ghost method theorem_progress(ST: store<ty>, t: tm, st: store<tm>)
 }
 
 // Type Soundness
+
 predicate normal_form(t: tm, st: store<tm>)
 {
   step(t, st).None?
