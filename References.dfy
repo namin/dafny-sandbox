@@ -472,6 +472,36 @@ ghost method theorem_progress(ST: store<ty>, t: tm, st: store<tm>)
 {
 }
 
+// Alternate formulation of progress theorem, which Danfy doesn't auto-prove.
+ghost method theorem_progress'(ST: store<ty>, t: tm, T: ty, st: store<tm>)
+  requires has_type(Context([]), ST, t) == Some(T);
+  requires store_well_typed(ST, st);
+  ensures value(t) || step(t, st).Some?;
+{
+  if (t.tapp?) {
+    var Tf :| has_type(Context([]), ST, t.f) == Some(Tf);
+    var Targ :| has_type(Context([]), ST, t.arg) == Some(Targ);
+    theorem_progress'(ST, t.f, Tf, st);
+    theorem_progress'(ST, t.arg, Targ, st);
+  } else if (t.tif0?) {
+    theorem_progress'(ST, t.c, TNat, st);
+    theorem_progress'(ST, t.a, T, st);
+    theorem_progress'(ST, t.b, T, st);
+  } else if (t.tref?) {
+    var Tv :| has_type(Context([]), ST, t.v) == Some(Tv);
+    theorem_progress'(ST, t.v, Tv, st);
+  } else if (t.tderef?) {
+    var Tcell :| has_type(Context([]), ST, t.cell) == Some(Tcell);
+    theorem_progress'(ST, t.cell, Tcell, st);
+  } else if (t.tassign?) {
+    var Tlhs :| has_type(Context([]), ST, t.lhs) == Some(Tlhs);
+    var Trhs :| has_type(Context([]), ST, t.rhs) == Some(Trhs);
+    theorem_progress'(ST, t.lhs, Tlhs, st);
+    theorem_progress'(ST, t.rhs, Trhs, st);
+  } else {
+  }
+}
+
 // Type Soundness
 
 predicate normal_form(t: tm, st: store<tm>)
