@@ -118,6 +118,7 @@ ghost method lemma_free_in_context(c: context, x: nat, t: tm)
 {
   if (t.tabs?) {
     assert t.x != x;
+    assert has_type(Context(Extend(t.x, t.T, c.m)), t.body).Some?;
     lemma_free_in_context(Context(Extend(t.x, t.T, c.m)), x, t.body);
     assert find(Extend(t.x, t.T, c.m), x).Some?;
   }
@@ -127,7 +128,7 @@ ghost method corollary_typable_empty__closed(t: tm)
   requires has_type(Context(Empty), t).Some?;
   ensures closed(t);
 {
-  parallel (x: nat)
+  forall (x: nat)
     ensures !appears_free_in(x, t);
   {
     if (appears_free_in(x, t)) {
@@ -295,7 +296,7 @@ ghost method lemma_if_closed(c: tm, a: tm, b: tm)
 {
   if (!closed(c)) {
     assert exists x:nat :: appears_free_in(x, c);
-    parallel (x:nat | appears_free_in(x, c))
+    forall (x:nat | appears_free_in(x, c))
       ensures appears_free_in(x, tif(c, a, b));
     {
     }
@@ -304,7 +305,7 @@ ghost method lemma_if_closed(c: tm, a: tm, b: tm)
   }
   if (!closed(a)) {
     assert exists x:nat :: appears_free_in(x, a);
-    parallel (x:nat | appears_free_in(x, a))
+    forall (x:nat | appears_free_in(x, a))
       ensures appears_free_in(x, tif(c, a, b));
     {
     }
@@ -313,7 +314,7 @@ ghost method lemma_if_closed(c: tm, a: tm, b: tm)
   }
   if (!closed(b)) {
     assert exists x:nat :: appears_free_in(x, b);
-    parallel (x:nat | appears_free_in(x, b))
+    forall (x:nat | appears_free_in(x, b))
       ensures appears_free_in(x, tif(c, a, b));
     {
     }
@@ -328,7 +329,7 @@ ghost method lemma_app_closed(f: tm, arg: tm)
 {
   if (!closed(f)) {
     assert exists x:nat :: appears_free_in(x, f);
-    parallel (x:nat | appears_free_in(x, f))
+    forall (x:nat | appears_free_in(x, f))
       ensures appears_free_in(x, tapp(f, arg));
     {
     }
@@ -337,7 +338,7 @@ ghost method lemma_app_closed(f: tm, arg: tm)
   }
   if (!closed(arg)) {
     assert exists x:nat :: appears_free_in(x, arg);
-    parallel (x:nat | appears_free_in(x, arg))
+    forall (x:nat | appears_free_in(x, arg))
       ensures appears_free_in(x, tapp(f, arg));
     {
     }
@@ -352,7 +353,7 @@ ghost method lemma_abs_closed(x: nat, T: ty, t: tm, y: nat)
   ensures !appears_free_in(y, t);
 {
   assert forall z:nat :: !appears_free_in(z, tabs(x, T, t));
-  parallel (z:nat)
+  forall (z:nat)
     ensures z==x || !appears_free_in(z, t);
   {
     if (z!=x) {
@@ -393,7 +394,7 @@ ghost method lemma_step_preserves_closed(t: tm, t': tm)
   if (t.tapp? && t.f.tabs? && value(t.arg)) {
     assert t' == subst(t.f.x, t.arg, t.f.body);
     lemma_app_closed(t.f, t.arg);
-    parallel (y:nat)
+    forall (y:nat)
       ensures !appears_free_in(y, t');
     {
       if (y==t.f.x) {
@@ -496,7 +497,7 @@ ghost method lemma_subst_closed(t: tm)
   requires closed(t);
   ensures forall x:nat, t' :: subst(x, t', t) == t;
 {
-  parallel (x:nat)
+  forall (x:nat)
     ensures forall t' :: subst(x, t', t) == t;
   {
     lemma_vacuous_substitution(t, x);
@@ -551,7 +552,7 @@ ghost method lemma_msubst_closed(t: tm)
   requires closed(t);
   ensures forall e :: msubst(e, t) == t;
 {
-  parallel (e: partial_map<tm>)
+  forall (e: partial_map<tm>)
     ensures msubst(e, t) == t;
   {
     lemma_msubst_closed_any(t, e);
@@ -860,7 +861,7 @@ ghost method lemma_g_domains_match(c: partial_map<ty>, e: partial_map<tm>, k: na
   requires g(c, e, k);
   ensures forall x:nat :: lookup(x, c).Some? ==> lookup(x, e).Some?;
 {
-  parallel (x:nat | lookup(x, c).Some?)
+  forall (x:nat | lookup(x, c).Some?)
     ensures lookup(x, e).Some?;
   {
     lemma_g_domains_match_any(c, e, k, x);
@@ -893,7 +894,7 @@ ghost method lemma_g_drop(c: partial_map<ty>, e: partial_map<tm>, k: nat)
   requires g(c, e, k);
   ensures forall x:nat :: g(drop(x, c), drop(x, e), k);
 {
-  parallel (x:nat)
+  forall (x:nat)
     ensures g(drop(x, c), drop(x, e), k);
   {
     lemma_g_drop_any(c, e, k, x);
@@ -917,10 +918,11 @@ ghost method lemma_g_msubst_closed(c: partial_map<ty>, e: partial_map<tm>, k: na
     lemma_g_monotonic(c, e, k, 0);
     var v := make_V0(T1);
     var e' := Extend(x, v, e);
+    assert has_type(Context(c'), body) == Some(T.bodyT);
     lemma_g_msubst_closed(c', e', 0, body, T.bodyT);
     lemma_g_env_closed(c, e, k);
     lemma_subst_msubst(e, x, v, body);
-    parallel (y:nat | y!=x)
+    forall (y:nat | y!=x)
       ensures !appears_free_in(y, msubst(drop(x, e), body));
     {
       lemma_subst_afi(x, v, msubst(drop(x, e), body), y);
@@ -992,7 +994,7 @@ ghost method theorem_fundamental_R_app(c: partial_map<ty>, e: partial_map<tm>, k
   var marg := msubst(e, arg);
   var mt := msubst(e, t);
 
-  parallel (i:nat, j:nat, t' | i+j<k && mstep(mt, t', i) && irred(t'))
+  forall (i:nat, j:nat, t' | i+j<k && mstep(mt, t', i) && irred(t'))
     ensures V(T, t', j);
   {
     var f', fi := theorem_fundamental_R_app_f(Tf, mt, mf, marg, t', k, i, j);
@@ -1021,7 +1023,7 @@ ghost method theorem_fundamental_R(c: partial_map<ty>, t: tm, T: ty)
   decreases t;
 {
 // The proof is by induction on the typing derivation, which is syntax-directed.
-  parallel (e, k:nat | g(c, e, k))
+  forall (e, k:nat | g(c, e, k))
     ensures E(T, msubst(e, t), k);
   {
     match t {
@@ -1034,7 +1036,7 @@ ghost method theorem_fundamental_R(c: partial_map<ty>, t: tm, T: ty)
       var T2 := T.bodyT;
       var c' := Extend(x, T1, c);
       theorem_fundamental_R(c', body, T2);
-      parallel (j:nat, v | j<=k && closed(v) && V(T1, v, j))
+      forall (j:nat, v | j<=k && closed(v) && V(T1, v, j))
         ensures E(T2, subst(x, v, msubst(drop(x, e), body)), j);
       {
         var e' := Extend(x, v, e);
@@ -1066,7 +1068,7 @@ ghost method theorem_fundamental_R(c: partial_map<ty>, t: tm, T: ty)
       var mb := msubst(e, b);
       var mt := msubst(e, t);
 
-      parallel (i:nat, j:nat, t' | i+j<k && mstep(mt, t', i) && irred(t'))
+      forall (i:nat, j:nat, t' | i+j<k && mstep(mt, t', i) && irred(t'))
         ensures V(T, t', j);
       {
         var c', ci := lemma_if_irred__c_mstep_irred(mc, ma, mb, t', i);
@@ -1088,15 +1090,15 @@ ghost method theorem_fundamental_R(c: partial_map<ty>, t: tm, T: ty)
 ghost method corollary_type_safety(t: tm)
   ensures type_safety(t);
 {
-  parallel (T | has_type(Context(Empty), t).Some?)
+  forall (T | has_type(Context(Empty), t).Some?)
     ensures forall t', n:nat :: mstep(t, t', n) ==> value(t') || step(t').Some?;
   {
     var T := has_type(Context(Empty), t).get;
-    parallel (t', n:nat | mstep(t, t', n))
+    forall (t', n:nat | mstep(t, t', n))
       ensures value(t') || step(t').Some?;
     {
       theorem_fundamental_R(Empty, t, T);
-      parallel (e | g(Empty, e, n+1))
+      forall (e | g(Empty, e, n+1))
         ensures e==Empty;
         ensures value(t') || step(t').Some?;
       {

@@ -172,7 +172,7 @@ ghost method can_build_ev_lc(e: exp, sup: nat, ev: ev_lc)
     build_ev_lc_bigger(open_a(e.body, a(sup)), ev.sup, sup);
     built_ev_lc(open_a(e.body, a(sup)), sup);
     var ev_body :=  build_ev_lc(open_a(e.body, a(sup)), sup).get;
-    parallel (i | i >= sup)
+    forall (i | i >= sup)
       ensures build_ev_lc(open_a(e.body, a(i)), sup) == Some(ev_body);
     {
       build_ev_lc_bigger(open_a(e.body, a(i)), ev.sup, sup);
@@ -211,7 +211,7 @@ ghost method build_ev_lc_bigger(e: exp, sup: nat, sup': nat)
     assert build_ev_lc(open_a(e.body, a(sup)), sup).Some?;
     assert forall i :: i >= sup ==> build_ev_lc(open_a(e.body, a(i)), sup) == build_ev_lc(open_a(e.body, a(sup)), sup);
     assert forall i :: i >= sup' ==> build_ev_lc(open_a(e.body, a(i)), sup) == build_ev_lc(open_a(e.body, a(sup)), sup);
-    parallel (i | i >= sup')
+    forall (i | i >= sup')
       ensures build_ev_lc(open_a(e.body, a(sup')), sup').Some?;
       ensures build_ev_lc(open_a(e.body, a(i)), sup') == build_ev_lc(open_a(e.body, a(sup')), sup');
     {
@@ -266,7 +266,7 @@ ghost method equiv_ev_lc_subst(e: exp, x: atom, y: atom, z: atom, sup: nat)
     assert build_ev_lc(open_a(subst(x, fvar(z), e).body, a(sup)), sup).Some?;
 
     assert forall i :: i >= sup ==> build_ev_lc(open_a(subst(x, fvar(y), e).body, a(i)), sup) == build_ev_lc(open_a(subst(x, fvar(y), e).body, a(sup)), sup);
-    parallel (i | i >= sup)
+    forall (i | i >= sup)
       ensures build_ev_lc(subst(x, fvar(z), open(e.body, fvar(a(i)))), sup) == build_ev_lc(subst(x, fvar(y), open(e.body, fvar(a(i)))), sup);
       ensures build_ev_lc(subst(x, fvar(z), open(e.body, fvar(a(i)))), sup) == build_ev_lc(subst(x, fvar(z), open(e.body, fvar(a(sup)))), sup);
       ensures build_ev_lc(subst(x, fvar(y), open(e.body, fvar(a(i)))), sup) == build_ev_lc(subst(x, fvar(z), open(e.body, fvar(a(i)))), sup);
@@ -419,7 +419,7 @@ ghost method lemma_subst_lc(x: atom, u: exp, e: exp, L: seq<atom>)
 {
   if (e.abs?) {
     assert lc_abs(e, L);
-    parallel (y | y !in L)
+    forall (y | y !in L)
       ensures lc(open(subst(x, u, e.body), fvar(y)), L);
     {
       lemma_subst_lc(x, u, open_a(e.body, y), L);
@@ -468,7 +468,7 @@ ghost method lemma_subst_lc'(x: atom, u: exp, e: exp, ev_lc_e: ev_lc, ev_lc_u: e
     assert open(subst(x, u, e.body), fvar(a(sup))) == subst(x, u, open(e.body, fvar(a(sup))));
     assert build_ev_lc(open(subst(x, u, e.body), fvar(a(sup))), sup) == Some(ev_subst_body_sup);
 
-    parallel (i | i >= sup)
+    forall (i | i >= sup)
       ensures build_ev_lc(open(subst(x, u, e.body), fvar(a(i))), sup) == Some(ev_subst_body_sup);
     {
       built_ev_lc(open_a(e.body, a(i)), sup);

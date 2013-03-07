@@ -184,6 +184,7 @@ ghost method lemma_free_in_context(c: context, x: nat, t: tm)
 {
   if (t.tabs?) {
     assert t.x != x;
+    assert has_type(Context(Extend(t.x, t.T, c.m)), t.body).Some?;
     lemma_free_in_context(Context(Extend(t.x, t.T, c.m)), x, t.body);
     assert find(Extend(t.x, t.T, c.m), x).Some?;
   }
@@ -193,8 +194,7 @@ ghost method corollary_typable_empty__closed(t: tm)
   requires has_type(Context(Empty), t).Some?;
   ensures closed(t);
 {
-  parallel (x: nat)
-    ensures !appears_free_in(x, t);
+  forall x: nat ensures !appears_free_in(x, t);
   {
     if (appears_free_in(x, t)) {
       lemma_free_in_context(Context(Empty), x, t);

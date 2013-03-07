@@ -228,7 +228,7 @@ ghost method lemma_store_extends_well_typed(ST: store<ty>, st: store<tm>, t: tm,
   var ST' := store_extend(ST, T);
   var st' := store_extend(st, t);
   assert |st'.m| == |st.m|+1;
-  parallel (l:nat | l < |st'.m|) ensures has_type(Context([]), ST', store_lookup(l, st')) == Some(store_lookup(l, ST'));
+  forall (l:nat | l < |st'.m|) ensures has_type(Context([]), ST', store_lookup(l, st')) == Some(store_lookup(l, ST'));
   {
     if (l == |st.m|) {
       assert store_lookup(l, st') == t;
@@ -293,7 +293,7 @@ ghost method corollary_typable_empty__closed(ST: store<ty>, t: tm)
   requires has_type(Context([]), ST, t).Some?;
   ensures closed(t);
 {
-  parallel (x: nat)
+  forall (x: nat)
     ensures !appears_free_in(x, t);
   {
     if (appears_free_in(x, t)) {

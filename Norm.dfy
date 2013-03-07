@@ -126,6 +126,7 @@ ghost method lemma_free_in_context(c: context, x: nat, t: tm)
 {
   if (t.tabs?) {
     assert t.x != x;
+    assert has_type(Context(Extend(t.x, t.T, c.m)), t.body).Some?;
     lemma_free_in_context(Context(Extend(t.x, t.T, c.m)), x, t.body);
     assert find(Extend(t.x, t.T, c.m), x).Some?;
   }
@@ -135,8 +136,7 @@ ghost method corollary_typable_empty__closed(t: tm)
   requires has_type(Context(Empty), t).Some?;
   ensures closed(t);
 {
-  parallel (x: nat)
-    ensures !appears_free_in(x, t);
+  forall x: nat ensures !appears_free_in(x, t);
   {
     if (appears_free_in(x, t)) {
       lemma_free_in_context(Context(Empty), x, t);
@@ -242,13 +242,13 @@ ghost method lemma_step_preserves_halting(t: tm, t': tm)
   ensures halts(t) <==> halts(t');
 {
   if (halts(t)) {
-    parallel (t'', n:nat | reduces_to(t, t'', n) && value(t''))
+    forall (t'', n:nat | reduces_to(t, t'', n) && value(t''))
       ensures reduces_to(t', t'', n-1) && value(t'');
     {
     }
   }
   if (!halts(t)) {
-    parallel (t'', n:nat | !reduces_to(t, t'', n+1) || !value(t''))
+    forall (t'', n:nat | !reduces_to(t, t'', n+1) || !value(t''))
       ensures !reduces_to(t', t'', n) || !value(t'');
     {
     }
@@ -266,7 +266,7 @@ ghost method lemma_step_preserves_R(T: ty, t: tm, t': tm)
     var T1 := T.paramT;
     var T2 := T.bodyT;
     assert R(TArrow(T1, T2), t);
-    parallel (s | R(T1, s))
+    forall (s | R(T1, s))
       ensures R(T2, tapp(t', s));
     {
       assert R(T2, tapp(t, s));
@@ -298,7 +298,7 @@ ghost method lemma_step_preserves_R'(T: ty, t: tm, t': tm)
     var T1 := T.paramT;
     var T2 := T.bodyT;
     assert R(TArrow(T1, T2), t');
-    parallel (s | R(T1, s))
+    forall (s | R(T1, s))
       ensures R(T2, tapp(t, s));
     {
       assert R(T2, tapp(t', s));
@@ -378,7 +378,7 @@ ghost method lemma_subst_closed(t: tm)
   requires closed(t);
   ensures forall x:nat, t' :: subst(x, t', t) == t;
 {
-  parallel (x:nat)
+  forall (x:nat)
     ensures forall t' :: subst(x, t', t) == t;
   {
     lemma_vacuous_substitution(t, x);
@@ -433,7 +433,7 @@ ghost method lemma_msubst_closed(t: tm)
   requires closed(t);
   ensures forall e :: msubst(e, t) == t;
 {
-  parallel (e: partial_map<tm>)
+  forall (e: partial_map<tm>)
     ensures msubst(e, t) == t;
   {
     lemma_msubst_closed_any(t, e);
@@ -565,7 +565,7 @@ ghost method lemma_instantiation_domains_match(c: partial_map<ty>, e: partial_ma
   requires instantiation(c, e);
   ensures forall x:nat :: lookup(x, c).Some? ==> lookup(x, e).Some?;
 {
-  parallel (x:nat | lookup(x, c).Some?)
+  forall (x:nat | lookup(x, c).Some?)
     ensures lookup(x, e).Some?;
   {
     lemma_instantiation_domains_match_any(c, e, x);
@@ -638,7 +638,7 @@ ghost method lemma_instantiation_drop(c: partial_map<ty>, e: partial_map<tm>)
   requires instantiation(c, e);
   ensures forall x:nat :: instantiation(drop(x, c), drop(x, e));
 {
-  parallel (x:nat)
+  forall (x:nat)
     ensures instantiation(drop(x, c), drop(x, e));
   {
     lemma_instantiation_drop_any(c, e, x);
@@ -685,7 +685,7 @@ ghost method lemma_msubst_preserves_typing(c: partial_map<ty>, e: partial_map<tm
     has_type(Context(mextend(init, c)), t) == Some(S) ==>
     has_type(Context(init), msubst(e, t)) == Some(S);
 {
-  parallel (init, t, S | has_type(Context(mextend(init, c)), t) == Some(S))
+  forall (init, t, S | has_type(Context(mextend(init, c)), t) == Some(S))
     ensures has_type(Context(init), msubst(e, t)) == Some(S);
   {
     lemma_msubst_preserves_typing_any(c, e, init, t, S);
@@ -733,10 +733,13 @@ ghost method lemma_R_if(T: ty, c: tm, a: tm, b: tm)
   requires has_type(Context(Empty), tif(c, a, b)) == Some(T);
   ensures R(T, tif(c, a, b));
 {
+  assert R(TBool, c);
+  assert R(T, a);
+  assert R(T, b);
   assert exists c', nc:nat :: reduces_to(c, c', nc) && value(c');
   assert exists a', na:nat :: reduces_to(a, a', na) && value(a');
   assert exists b', nb:nat :: reduces_to(b, b', nb) && value(b');
-  parallel (c', a', b', nc:nat, na:nat, nb:nat |
+  forall (c', a', b', nc:nat, na:nat, nb:nat |
             reduces_to(c, c', nc) && value(c') &&
             reduces_to(a, a', na) && value(a') &&
             reduces_to(b, b', nb) && value(b'))
@@ -779,10 +782,10 @@ ghost method lemma_msubst_R(c: partial_map<ty>, e: partial_map<tm>, t: tm, T: ty
     assert value(msubst(e, t));
     assert halts(msubst(e, t));
 
-    parallel(s | R(T1, s))
+    forall (s | R(T1, s))
       ensures R(T.bodyT, tapp(msubst(e, t), s));
     {
-      parallel(s', n:nat | reduces_to(s, s', n) && value(s'))
+      forall (s', n:nat | reduces_to(s, s', n) && value(s'))
         ensures R(T.bodyT, tapp(msubst(e, t), s));
       {
         lemma_multistep_preserves_R(T1, s, s', n);

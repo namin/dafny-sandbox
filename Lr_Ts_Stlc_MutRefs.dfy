@@ -206,6 +206,7 @@ ghost method lemma_free_in_context(c: context, x: nat, t: tm)
 {
   if (t.tabs?) {
     assert t.x != x;
+    assert has_type(Context(Extend(t.x, t.T, c.m)), t.body).Some?;
     lemma_free_in_context(Context(Extend(t.x, t.T, c.m)), x, t.body);
     assert find(Extend(t.x, t.T, c.m), x).Some?;
   }
@@ -215,7 +216,7 @@ ghost method corollary_typable_empty__closed(t: tm)
   requires has_type(Context(Empty), t).Some?;
   ensures closed(t);
 {
-  parallel (x: nat)
+  forall (x: nat)
     ensures !appears_free_in(x, t);
   {
     if (appears_free_in(x, t)) {
@@ -380,7 +381,7 @@ ghost method lemma_if_closed(c: tm, a: tm, b: tm)
 {
   if (!closed(c)) {
     assert exists x:nat :: appears_free_in(x, c);
-    parallel (x:nat | appears_free_in(x, c))
+    forall (x:nat | appears_free_in(x, c))
       ensures appears_free_in(x, tif(c, a, b));
     {
     }
@@ -389,7 +390,7 @@ ghost method lemma_if_closed(c: tm, a: tm, b: tm)
   }
   if (!closed(a)) {
     assert exists x:nat :: appears_free_in(x, a);
-    parallel (x:nat | appears_free_in(x, a))
+    forall (x:nat | appears_free_in(x, a))
       ensures appears_free_in(x, tif(c, a, b));
     {
     }
@@ -398,7 +399,7 @@ ghost method lemma_if_closed(c: tm, a: tm, b: tm)
   }
   if (!closed(b)) {
     assert exists x:nat :: appears_free_in(x, b);
-    parallel (x:nat | appears_free_in(x, b))
+    forall (x:nat | appears_free_in(x, b))
       ensures appears_free_in(x, tif(c, a, b));
     {
     }
@@ -413,7 +414,7 @@ ghost method lemma_app_closed(f: tm, arg: tm)
 {
   if (!closed(f)) {
     assert exists x:nat :: appears_free_in(x, f);
-    parallel (x:nat | appears_free_in(x, f))
+    forall (x:nat | appears_free_in(x, f))
       ensures appears_free_in(x, tapp(f, arg));
     {
     }
@@ -422,7 +423,7 @@ ghost method lemma_app_closed(f: tm, arg: tm)
   }
   if (!closed(arg)) {
     assert exists x:nat :: appears_free_in(x, arg);
-    parallel (x:nat | appears_free_in(x, arg))
+    forall (x:nat | appears_free_in(x, arg))
       ensures appears_free_in(x, tapp(f, arg));
     {
     }
@@ -437,7 +438,7 @@ ghost method lemma_abs_closed(x: nat, T: ty, t: tm, y: nat)
   ensures !appears_free_in(y, t);
 {
   assert forall z:nat :: !appears_free_in(z, tabs(x, T, t));
-  parallel (z:nat)
+  forall (z:nat)
     ensures z==x || !appears_free_in(z, t);
   {
     if (z!=x) {
@@ -453,7 +454,7 @@ ghost method lemma_ref_closed(r: tm)
 {
   if (!closed(r)) {
     assert exists x:nat :: appears_free_in(x, r);
-    parallel (x:nat | appears_free_in(x, r))
+    forall (x:nat | appears_free_in(x, r))
       ensures appears_free_in(x, tref(r));
     {
     }
@@ -468,7 +469,7 @@ ghost method lemma_deref_closed(d: tm)
 {
   if (!closed(d)) {
     assert exists x:nat :: appears_free_in(x, d);
-    parallel (x:nat | appears_free_in(x, d))
+    forall (x:nat | appears_free_in(x, d))
       ensures appears_free_in(x, tderef(d));
     {
     }
@@ -483,7 +484,7 @@ ghost method lemma_assign_closed(lhs: tm, rhs: tm)
 {
   if (!closed(lhs)) {
     assert exists x:nat :: appears_free_in(x, lhs);
-    parallel (x:nat | appears_free_in(x, lhs))
+    forall (x:nat | appears_free_in(x, lhs))
       ensures appears_free_in(x, tassign(lhs, rhs));
     {
     }
@@ -492,7 +493,7 @@ ghost method lemma_assign_closed(lhs: tm, rhs: tm)
   }
   if (!closed(rhs)) {
     assert exists x:nat :: appears_free_in(x, rhs);
-    parallel (x:nat | appears_free_in(x, rhs))
+    forall (x:nat | appears_free_in(x, rhs))
       ensures appears_free_in(x, tassign(lhs, rhs));
     {
     }
@@ -610,7 +611,7 @@ ghost method lemma_step_preserves_closed(t: tm, s: store, t': tm, s': store)
   if (t.tapp? && t.f.tabs? && value(t.arg)) {
     assert t' == subst(t.f.x, t.arg, t.f.body);
     lemma_app_closed(t.f, t.arg);
-    parallel (y:nat)
+    forall (y:nat)
       ensures !appears_free_in(y, t');
     {
       if (y==t.f.x) {
@@ -769,7 +770,7 @@ ghost method lemma_subst_closed(t: tm)
   requires closed(t);
   ensures forall x:nat, t' :: subst(x, t', t) == t;
 {
-  parallel (x:nat)
+  forall (x:nat)
     ensures forall t' :: subst(x, t', t) == t;
   {
     lemma_vacuous_substitution(t, x);
@@ -824,7 +825,7 @@ ghost method lemma_msubst_closed(t: tm)
   requires closed(t);
   ensures forall e :: msubst(e, t) == t;
 {
-  parallel (e: partial_map<tm>)
+  forall (e: partial_map<tm>)
     ensures msubst(e, t) == t;
   {
     lemma_msubst_closed_any(t, e);
