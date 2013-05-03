@@ -256,6 +256,14 @@ predicate binds(a: atom, t: typ, E: env)
   exists i:nat :: i<|E.vars| && i<|E.typs| && E.vars[i]==a && E.typs[i]==t
 }
 
+ghost method helper_binds_uniq(E: env, x: atom, s: typ, t: typ)
+  requires wf_env(E);
+  requires binds(x, t, E);
+  requires binds(x, s, E);
+  ensures t==s;
+{
+}
+
 function extends(a: atom, t: typ, E: env): env
 {
   Env([a]+E.vars, [t]+E.typs)
@@ -269,6 +277,15 @@ function concat(E1: env, E2: env): env
 function fresh_in_env(E: env): atom
 {
   fresh_from(E.vars)
+}
+
+ghost method helper_binds_mid(E: env, F: env, x: atom, t: typ)
+  requires wf_env(F);
+  ensures binds(x, t, concat(F, extends(x, t, E)));
+{
+  var E' := concat(F, extends(x, t, E));
+  var i := |F.vars|;
+  assert i<|E'.vars| && i<|E'.typs| && E'.vars[i]==x && E'.typs[i]==t;
 }
 
 ghost method helper_binds_concat(E: env, F: env, G: env, a: atom, t: typ)
@@ -431,3 +448,76 @@ ghost method lemma_typing_c_weakening(E: env, F: env, e: exp, t: typ)
   lemma_typing_weakening_strengthened(E, F, empty_env(), e, t);
   helper_env_nil_concat(concat(F, E));
 }
+
+ghost method lemma_typing_subst_var_case(E: env, F: env, u: exp, s: typ, t: typ, z: atom, x: atom)
+  requires wf_env(E);
+  requires wf_env(F);
+  requires wf_env(concat(F, E));
+  requires wf_env(concat(F, extends(z, s, E)));
+  requires binds(x, t, concat(F, extends(z, s, E)));
+  requires typing_c(E, u, s);
+  ensures typing_c(concat(F, E), subst(z, u, fvar(x)), t);
+{
+  if (x == z) {
+    assert subst(z, u, fvar(x)) == u;
+    helper_binds_mid(E, F, z, s);
+    helper_binds_uniq(concat(F, extends(z, s, E)), x, s, t);
+    assert t == s;
+    lemma_typing_c_weakening(E, F, u, s);
+    assert typing_c(concat(F, E), subst(z, u, fvar(x)), t);
+  } else {
+  }
+}
+
+ghost method lemma_typing_c_to_lc_c(E: env, e: exp, t: typ)
+  requires typing_c(E, e, t);
+  ensures lc_c(e);
+  decreases size(e);
+{
+  if (e.abs?) {
+    var L := helper_abs_typing_c_L(E, e, t);
+    forall (x | x !in L)
+    ensures lc_c(open(e.body, fvar(x)));
+    {
+      lemma_typing_c_to_lc_c(extends(x, t.t1, E), open(e.body, fvar(x)), t.t2);
+    }
+  } else if (e.app?) {
+    assert exists t1 :: typing_c(E, e.f, typ_arrow(t1, t)) && typing_c(E, e.arg, t1);
+    var t1 :| typing_c(E, e.f, typ_arrow(t1, t)) && typing_c(E, e.arg, t1);
+    lemma_typing_c_to_lc_c(E, e.f, typ_arrow(t1, t));
+    lemma_typing_c_to_lc_c(E, e.arg, t1);
+  }
+}
+
+/*
+WIP: Rethink the representation of environment to make this easier.
+ghost method lemma_typing_c_subst(E: env, F: env, e: exp, u: exp, s: typ, t: typ, z: atom)
+  requires wf_env(E);
+  requires wf_env(F);
+  requires wf_env(concat(F, E));
+  requires wf_env(concat(F, extends(z, s, E)));
+  requires typing_c(concat(F, extends(z, s, E)), e, t);
+  requires typing_c(E, u, s);
+  ensures typing_c(concat(F, E), subst(z, u, e), t);
+  decreases size(e);
+{
+  var E' := concat(F, extends(z, s, E));
+  var E'' := concat(F, E);
+  if (e.fvar?) {
+    lemma_typing_subst_var_case(E, F, u, s, t, z, e.x);
+  } else if (e.abs?) {
+    lemma_typing_c_to_lc_c(E, u, s);
+    var L' := helper_abs_typing_c_L(E', e, t);
+    var L'' := L'+F.vars+E.vars+[z];
+    forall (x | x !in L'')
+    {
+      assert typing_c(extends(x, t.t1, E'), open(e.body, fvar(x)), t.t2);
+      lemma_subst_open_var_c(z, x, u, e);
+      lemma_typing_c_subst(E, extends(x, t.t1, F), open(e.body, fvar(x)), u, s, t.t2, z);
+    }
+    assume typing_c(concat(F, E), subst(z, u, e), t);
+  } else if (e.app?) {
+    assume typing_c(concat(F, E), subst(z, u, e), t);
+  }
+}
+*/
