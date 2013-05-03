@@ -26,11 +26,7 @@ I've translated some parts of Software Foundations from Coq to Dafny.
 Beyond Software Foundations
 ---------------------------
 
-* [StlcLn: Locally-nameless STLC](https://github.com/namin/dafny-sandbox/blob/master/StlcLn.dfy):
-  the locally-nameless representation with cofinite quantification works
-  very well in Coq. However, I haven't found a translation in Dafny
-  which is pleasant to work with (because of the cofinite
-  quantification), so abandoning this attempt for now.
+* [StlcLn: Locally-nameless STLC](https://github.com/namin/dafny-sandbox/blob/master/StlcLn.dfy)
 
 Step-Indexed Logical Relations
 ------------------------------
