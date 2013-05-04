@@ -519,3 +519,14 @@ ghost method lemma_typing_c_subst(E: seq<pair<atom,typ>>, F: seq<pair<atom,typ>>
   } else {
   }
 }
+
+ghost method lemma_typing_c_subst_simple(E: seq<pair<atom,typ>>, e: exp, u: exp, s: typ, t: typ, z: atom)
+  requires typing_c(extends(z, s, E), e, t);
+  requires typing_c(E, u, s);
+  ensures typing_c(E, subst(z, u, e), t);
+{
+  assert []+[P(z,s)]+E==extends(z, s, E);
+  lemma_typing_c_subst(E, [], e, u, s, t, z);
+  assert []+E==E;
+}
+
