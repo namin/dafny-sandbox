@@ -280,6 +280,9 @@ function dom(E: seq<pair<atom,typ>>): seq<atom>
   ensures forall x :: x !in dom(E) <==> lookup(x, E).None?;
   ensures |E|>0 ==> forall x :: x in dom(E[1..]) ==> x in dom(E);
   ensures |E|==|dom(E)|;
+  ensures forall i:nat :: i<|E| ==> E[i].fst==dom(E)[i];
+  ensures forall i:nat :: i<|E| ==> E[i].fst in dom(E);
+  ensures forall x :: x in dom(E) <==> exists i:nat :: i<|E| && x==E[i].fst;
   decreases |E|;
 {
   if (E==[]) then [] else [E[0].fst]+dom(E[1..])
@@ -297,7 +300,7 @@ ghost method example_dom(x: atom, t: typ)
 
 predicate uniq(E: seq<pair<atom,typ>>)
 {
-  forall x, t1, t2 :: binds(x, t1, E) && binds(x, t2, E) ==> t1==t2
+  forall i:nat, j:nat :: i<|E| && j<i ==> E[i].fst != E[j].fst
 }
 
 ghost method example_uniq(x: atom, y: atom, tx: typ, ty: typ)
@@ -311,34 +314,25 @@ ghost method helper_uniq_extends(x: atom, t: typ, E: seq<pair<atom,typ>>)
   requires uniq(E);
   ensures uniq(extends(x, t, E));
 {
-  var E' := extends(x, t, E);
-  forall (y, t1, t2 | binds(y, t1, E') && binds(y, t2, E'))
-  ensures t1==t2;
-  {
-    if (x==y) {
-      helper_no_lookup_no_binds(x, E);
-      assert forall t :: !binds(x, t, E);
-      assert t1==t;
-      assert t1==t2;
-    } else {
-      assert binds(y, t1, E);
-      assert binds(y, t2, E);
-      assert t1==t2;
-    }
-  }
 }
 
 ghost method helper_uniq_parts(E: seq<pair<atom,typ>>, F: seq<pair<atom,typ>>, G: seq<pair<atom,typ>>)
   requires uniq(G+F+E);
   ensures uniq(G+E);
 {
-  var E' := G+E;
-  var E'' := G+F+E;
-  forall (y, t1, t2 | binds(y, t1, E') && binds(y, t2, E'))
-  ensures t1==t2;
-  {
-    assert binds(y, t1, E'');
-    assert binds(y, t2, E'');
+}
+
+ghost method helper_uniq_minus(x: atom, t: typ, E: seq<pair<atom,typ>>)
+  requires uniq(extends(x, t, E));
+  ensures uniq(E);
+  ensures x !in dom(E);
+{
+  if (x in dom(E)) {
+    assert exists i:nat :: i<|E| && x==E[i].fst;
+    var i:nat :| i<|E| && x==E[i].fst;
+    assert x==extends(x, t, E)[i+1].fst;
+    assert extends(x, t, E)[0].fst == extends(x, t, E)[i+1].fst;
+    assert !uniq(extends(x, t, E));
   }
 }
 
@@ -580,5 +574,64 @@ ghost method theorem_progress_c(e: exp, t: typ)
     theorem_progress_c(e.f, typ_arrow(t1, t));
     theorem_progress_c(e.arg, t1);
     assert eval_c(e).Some?;
+  }
+}
+
+ghost method lemma_typing_c_uniq(E: seq<pair<atom,typ>>, e: exp, t: typ)
+  requires typing_c(E, e, t);
+  ensures uniq(E);
+  decreases size(e);
+{
+  if (e.abs?) {
+    var L := helper_abs_typing_c_L(E, e, t);
+    var y := fresh_from(L);
+    lemma_typing_c_uniq(extends(y, t.t1, E), open(e.body, fvar(y)), t.t2);
+    assert uniq(extends(y, t.t1, E));
+    helper_uniq_minus(y, t.t1, E);
+    assert uniq(E);
+  } else if (e.app?) {
+    assert exists t1 :: typing_c(E, e.f, typ_arrow(t1, t)) && typing_c(E, e.arg, t1);
+    var t1 :| typing_c(E, e.f, typ_arrow(t1, t)) && typing_c(E, e.arg, t1);
+    lemma_typing_c_uniq(E, e.arg, t1);
+  }
+}
+
+ghost method lemma_typing_c_rename(x: atom, y: atom, E: seq<pair<atom,typ>>, e: exp, t1: typ, t2: typ)
+  requires x !in fv(e);
+  requires y !in dom(E)+fv(e);
+  requires typing_c(extends(x, t1, E), open(e, fvar(x)), t2);
+  ensures typing_c(extends(y, t1, E), open(e, fvar(y)), t2);
+{
+  if (x != y) {
+    lemma_typing_c_uniq(extends(x, t1, E), open(e, fvar(x)), t2);
+    helper_uniq_minus(x, t1, E);
+    helper_uniq_extends(y, t1, E);
+    assert uniq(extends(y, t1, E));
+    assert x !in dom(E);
+    helper_uniq_extends(x, t1, extends(y, t1, E));
+    assert [P(x, t1)]+[P(y,t1)]+E==extends(x, t1, extends(y, t1, E));
+    assert uniq([P(x, t1)]+[P(y,t1)]+E);
+
+    lemma_subst_intro(x, fvar(y), e);
+    assert open(e, fvar(y)) == subst(x, fvar(y), open(e, fvar(x)));
+
+    assert binds(y, t1, extends(y, t1, E));
+    assert typing_c(extends(y, t1, E), fvar(y), t1);
+
+    assert typing_c(extends(x, t1, E), open(e, fvar(x)), t2);
+    lemma_typing_c_weakening_strengthened(E, [P(y, t1)], [P(x, t1)], open(e, fvar(x)), t2);
+    assert typing_c([P(x, t1)]+[P(y, t1)]+E, open(e, fvar(x)), t2);
+    calc == {
+      [P(x, t1)]+[P(y, t1)]+E;
+      [P(x, t1)]+([P(y, t1)]+E);
+      [P(x, t1)]+extends(y, t1, E);
+    }
+    assert typing_c([P(x, t1)]+extends(y, t1, E), open(e, fvar(x)), t2);
+
+    lemma_typing_c_subst_simple(extends(y, t1, E), open(e, fvar(x)), fvar(y), t1, t2, x);
+    assert typing_c(extends(y, t1, E), subst(x, fvar(y), open(e, fvar(x))), t2);
+    lemma_subst_intro(x, fvar(y), e);
+
+    assert typing_c(extends(y, t1, E), open(e, fvar(y)), t2);
   }
 }
