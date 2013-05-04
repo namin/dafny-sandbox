@@ -530,3 +530,41 @@ ghost method lemma_typing_c_subst_simple(E: seq<pair<atom,typ>>, e: exp, u: exp,
   assert []+E==E;
 }
 
+predicate value_c(e: exp)
+{
+  e.abs? && lc_c(e)
+}
+
+function eval_c(e: exp): option<exp>
+{
+  /* beta */
+  if (e.app? && e.f.abs? && lc_c(e.f) && value_c(e.arg))
+  then Some(open(e.f.body, e.arg))
+  /* app f */
+  else if (e.app? && lc_c(e.arg) && eval_c(e.f).Some?)
+  then Some(app(eval_c(e.f).get, e.arg))
+  /* app arg */
+  else if (e.app? && value_c(e.f) && eval_c(e.arg).Some?)
+  then Some(app(e.f, eval_c(e.arg).get))
+  else None
+}
+
+ghost method theorem_preservation_c(E: seq<pair<atom,typ>>, e: exp, t: typ)
+  requires typing_c(E, e, t);
+  requires eval_c(e).Some?;
+  ensures typing_c(E, eval_c(e).get, t);
+{
+  if (e.app? && e.f.abs? && lc_c(e.f) && value_c(e.arg)) {
+    assert exists t1 :: typing_c(E, e.f, typ_arrow(t1, t)) && typing_c(E, e.arg, t1);
+    var t1 :| typing_c(E, e.f, typ_arrow(t1, t)) && typing_c(E, e.arg, t1);
+    var L := helper_abs_typing_c_L(E, e.f, typ_arrow(t1, t));
+    var y := fresh_from(L+fv(e.f.body));
+    assert typing_c(extends(y, t1, E), open(e.f.body, fvar(y)), t);
+    lemma_typing_c_subst_simple(E, open(e.f.body, fvar(y)), e.arg, t1, t, y);
+    assert typing_c(E, subst(y, e.arg, open(e.f.body, fvar(y))), t);
+    assert y !in fv(e.f.body);
+    lemma_subst_intro(y, e.arg, e.f.body);
+    assert typing_c(E, open(e.f.body, e.arg), t);
+    assert typing_c(E, eval_c(e).get, t);
+  }
+}
