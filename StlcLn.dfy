@@ -568,3 +568,17 @@ ghost method theorem_preservation_c(E: seq<pair<atom,typ>>, e: exp, t: typ)
     assert typing_c(E, eval_c(e).get, t);
   }
 }
+
+ghost method theorem_progress_c(e: exp, t: typ)
+  requires typing_c([], e, t);
+  ensures value_c(e) || eval_c(e).Some?;
+{
+  lemma_typing_c_to_lc_c([], e, t);
+  if (e.app?) {
+    assert exists t1 :: typing_c([], e.f, typ_arrow(t1, t)) && typing_c([], e.arg, t1);
+    var t1 :| typing_c([], e.f, typ_arrow(t1, t)) && typing_c([], e.arg, t1);
+    theorem_progress_c(e.f, typ_arrow(t1, t));
+    theorem_progress_c(e.arg, t1);
+    assert eval_c(e).Some?;
+  }
+}
