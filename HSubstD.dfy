@@ -162,7 +162,7 @@ function ne2nf(con: Con, T: Ty, e: Ne): option<Nf>
 }
 
 function subst_nf(con: Con, T: Ty, t: Nf/*T*/, x: Var/*T*/, u: Nf/*T*/): option<Nf>
-  decreases T, t;
+  decreases T, T, t;
 {
   match t
   case NfLam(tya, body) =>
@@ -180,12 +180,13 @@ function subst_nf(con: Con, T: Ty, t: Nf/*T*/, x: Var/*T*/, u: Nf/*T*/): option<
 	case NeSp(y, ts) =>
 	  var r := subst_sp(con, T, T, Base, ts, x, u);
 	  if (r.None?) then None
-	  else if (x==y) then if (T.Arrow?) then app_nf_sp(con, T, Base, u, r.get) else None
+	  else if (x==y) then if (T.Arrow? && (T==Base || T>Base)) then app_nf_sp(con, T, Base, u, r.get) else None
 	  else Some(NfNe(NeSp(y, r.get)))
 }
 
 function subst_sp(con: Con, T: Ty, A: Ty, B: Ty, s: Sp/*A,B*/, x: Var/*T*/, u: Nf/*T*/): option<Sp/*A,B*/>
-  decreases T, s;
+  requires T==A || T>A;
+  decreases T, A, s;
 {
   match s
   case SpEpsilon(ty) => Some(SpEpsilon(ty))
@@ -199,7 +200,8 @@ function subst_sp(con: Con, T: Ty, A: Ty, B: Ty, s: Sp/*A,B*/, x: Var/*T*/, u: N
 }
 
 function app_nf_sp(con: Con, T: Ty, B: Ty, f: Nf/*T*/, s: Sp/*T,B*/): option<Nf>
-  decreases T, s;
+  requires T==Base || T>B;
+  decreases T, B, s;
 {
   match s
   case SpEpsilon(ty) => Some(f)
@@ -213,7 +215,7 @@ function app_nf_sp(con: Con, T: Ty, B: Ty, f: Nf/*T*/, s: Sp/*T,B*/): option<Nf>
 }
 
 function napp(con: Con, T: Ty, f: Nf, u: Nf): option<Nf>
-  decreases T, u;
+  decreases T, T, u;
 {
   if (T.Arrow? && f.NfLam?) then
   subst_nf(con, T.b, f.body, V(0), u)
