@@ -165,11 +165,10 @@ ghost method theorem_progress(t: tm)
 
 // Towards the substitution lemma
 
-ghost method lemma_free_in_context(c: map<int,ty>, x: int, t: tm)
+ghost method {:induction t} lemma_free_in_context(c: map<int,ty>, x: int, t: tm)
   requires x in fv(t);
   requires has_type(c, t).Some?;
   ensures find(c, x).Some?;
-  ensures has_type(c, t).Some?;
   decreases t;
 {
   if (t.tabs?) {
