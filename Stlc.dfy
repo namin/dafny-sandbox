@@ -1,9 +1,8 @@
-// The Simply Typed Lambda-Calculus
-// http://www.cis.upenn.edu/~bcpierce/sf/Stlc.html
+// Proving type safety of the Simply Typed Lambda-Calculus in Dafny
+// adapted from Coq (http://www.cis.upenn.edu/~bcpierce/sf/Stlc.html)
 
 // Utilities
 datatype option<A> = None | Some(get: A);
-
 
 // Syntax
 
@@ -11,7 +10,8 @@ datatype option<A> = None | Some(get: A);
 datatype ty = TBool | TArrow(paramT: ty, bodyT: ty);
 
 // Terms
-datatype tm = tvar(id: nat) | tapp(f: tm, arg: tm) | tabs(x: nat, T: ty, body: tm) | ttrue | tfalse | tif(c: tm, a: tm, b: tm);
+datatype tm = tvar(id: int) | tapp(f: tm, arg: tm) | tabs(x: int, T: ty, body: tm) |
+              ttrue | tfalse | tif(c: tm, a: tm, b: tm);
 
 
 // Operational Semantics
@@ -23,7 +23,17 @@ function value(t: tm): bool
 }
 
 // Free Variables and Substitution
-function subst(x: nat, s: tm, t: tm): tm
+function fv(t: tm): set<int>
+{
+  match t
+  case tvar(id) => {id}
+  case tapp(f, arg) => fv(f)+fv(arg)
+  case tabs(x, T, body) => fv(body)-{x}
+  case tif(c, a, b) => fv(a)+fv(b)+fv(c)
+  case ttrue => {}
+  case tfalse => {}
+}
+function subst(x: int, s: tm, t: tm): tm
 {
   match t
   case tvar(x') => if x==x' then s else t
@@ -46,6 +56,7 @@ function step(t: tm): option<tm>
                    else None
 }
 
+// The term t reduces to the term t' in n or less number of steps.
 function reduces_to(t: tm, t': tm, n: nat): bool
   decreases n;
 {
@@ -55,43 +66,36 @@ function reduces_to(t: tm, t': tm, n: nat): bool
 // Examples
 ghost method lemma_step_example1(n: nat)
   requires n > 0;
-  ensures reduces_to(tapp(tabs(0, TArrow(TBool, TBool), tvar(0)), tabs(0, TBool, tvar(0))), tabs(0, TBool, tvar(0)), n);
+  ensures reduces_to(tapp(tabs(0, TArrow(TBool, TBool), tvar(0)), tabs(0, TBool, tvar(0))),
+                     tabs(0, TBool, tvar(0)), n);
 {
 }
 
 
 // Typing
 
-// Contexts
-
-datatype partial_map<A> = Empty | Extend(x: nat, v: A, rest: partial_map<A>);
-function find<A>(m: partial_map<A>, x: nat): option<A>
+// A context is a partial map from variable names to types.
+function find(c: map<int,ty>, x: int): option<ty>
+  ensures (x in c)   ==> find(c, x) == Some(c[x]);
+  ensures (x !in c) <==> find(c, x) == None;
 {
-  match m
-  case Empty => None
-  case Extend(x', v, rest) => if x==x' then Some(v) else find(rest, x)
+  if (x in c) then Some(c[x]) else None
 }
-
-ghost method lemma_extend_eq<A>(m: partial_map<A>, x: nat, v: A)
-  ensures find(Extend(x, v, m), x) == Some(v);
+function extend(x: int, T: ty, c: map<int,ty>): map<int,ty>
+  ensures extend(x, T, c)==c[x:=T];
+  ensures find(extend(x, T, c), x) == Some(T);
 {
+  c[x:=T]
 }
-ghost method lemma_extend_neq<A>(m: partial_map<A>, x1: nat, v: A, x2: nat)
-  requires x1 != x2;
-  ensures find(Extend(x2, v, m), x1) == find(m, x1);
-{
-}
-
-datatype context = Context(m: partial_map<ty>);
 
 // Typing Relation
-function has_type(c: context, t: tm): option<ty>
+function has_type(c: map<int,ty>, t: tm): option<ty>
   decreases t;
 {
   match t
-  /* Var */        case tvar(id) => find(c.m, id)
+  /* Var */        case tvar(id) => find(c, id)
   /* Abs */        case tabs(x, T, body) =>
-                     var ty_body := has_type(Context(Extend(x, T, c.m)), body);
+                     var ty_body := has_type(extend(x, T, c), body);
                      if (ty_body.Some?) then Some(TArrow(T, ty_body.get)) else None
   /* App */        case tapp(f, arg) =>
                      var ty_f := has_type(c, f);
@@ -113,132 +117,114 @@ function has_type(c: context, t: tm): option<ty>
 // Examples
 
 ghost method example_typing_1()
-  ensures has_type(Context(Empty), tabs(0, TBool, tvar(0))) == Some(TArrow(TBool, TBool));
+  ensures has_type(map[], tabs(0, TBool, tvar(0))) == Some(TArrow(TBool, TBool));
 {
 }
 
 ghost method example_typing_2()
-  ensures has_type(Context(Empty), tabs(0, TBool, tabs(1, TArrow(TBool, TBool), tapp(tvar(1), tapp(tvar(1), tvar(0)))))) ==
+  ensures has_type(map[], tabs(0, TBool, tabs(1, TArrow(TBool, TBool), tapp(tvar(1), tapp(tvar(1), tvar(0)))))) ==
           Some(TArrow(TBool, TArrow(TArrow(TBool, TBool), TBool)));
 {
-  var c := Context(Extend(1, TArrow(TBool, TBool), Extend(0, TBool, Empty)));
-  assert find(c.m, 0) == Some(TBool);
+  var c := extend(1, TArrow(TBool, TBool), extend(0, TBool, map[]));
+  assert find(c, 0) == Some(TBool);
   assert has_type(c, tvar(0)) == Some(TBool);
   assert has_type(c, tvar(1)) == Some(TArrow(TBool, TBool));
   assert has_type(c, tapp(tvar(1), tapp(tvar(1), tvar(0)))) == Some(TBool);
 }
 
 ghost method nonexample_typing_1()
-  ensures has_type(Context(Empty), tabs(0, TBool, tabs(1, TBool, tapp(tvar(0), tvar(1))))) == None;
+  ensures has_type(map[], tabs(0, TBool, tabs(1, TBool, tapp(tvar(0), tvar(1))))) == None;
 {
-  var c := Context(Extend(1, TBool, Extend(0, TBool, Empty)));
-  assert find(c.m, 0) == Some(TBool);
+  var c := extend(1, TBool, extend(0, TBool, map[]));
+  assert find(c, 0) == Some(TBool);
   assert has_type(c, tapp(tvar(0), tvar(1))) == None;
 }
 
 ghost method nonexample_typing_3(S: ty, T: ty)
-  ensures has_type(Context(Empty), tabs(0, S, tapp(tvar(0), tvar(0)))) != Some(T);
+  ensures has_type(map[], tabs(0, S, tapp(tvar(0), tvar(0)))) != Some(T);
 {
-  var c:= Context(Extend(0, S, Empty));
+  var c:= extend(0, S, map[]);
   assert has_type(c, tapp(tvar(0), tvar(0))) == None;
 }
 
 
-// Properties
+// Type-Safety Properties
 
+// We're only interested in closed terms.
+function closed(t: tm): bool
+{
+  forall x :: x !in fv(t)
+}
 
 // Progress
 ghost method theorem_progress(t: tm)
-  requires has_type(Context(Empty), t).Some?;
+  requires has_type(map[], t).Some?;
   ensures value(t) || step(t).Some?;
 {
 }
 
+// Towards the substitution lemma
 
-// Free Occurrences
-function appears_free_in(x: nat, t: tm): bool
-{
-  /* var */  (t.tvar? && t.id==x) ||
-  /* app1 */ (t.tapp? && appears_free_in(x, t.f)) ||
-  /* app2 */ (t.tapp? && appears_free_in(x, t.arg)) ||
-  /* abs */  (t.tabs? && t.x!=x && appears_free_in(x, t.body)) ||
-  /* if1 */  (t.tif? && appears_free_in(x, t.c)) ||
-  /* if2 */  (t.tif? && appears_free_in(x, t.a)) ||
-  /* if3 */  (t.tif? && appears_free_in(x, t.b))
-}
-
-function closed(t: tm): bool
-{
-  forall x: nat :: !appears_free_in(x, t)
-}
-
-
-// Substitution Lemma
-
-ghost method lemma_free_in_context(c: context, x: nat, t: tm)
-  requires appears_free_in(x, t);
+ghost method lemma_free_in_context(c: map<int,ty>, x: int, t: tm)
+  requires x in fv(t);
   requires has_type(c, t).Some?;
-  ensures find(c.m, x).Some?;
+  ensures find(c, x).Some?;
   ensures has_type(c, t).Some?;
   decreases t;
 {
   if (t.tabs?) {
     assert t.x != x;
-    assert has_type(Context(Extend(t.x, t.T, c.m)), t.body).Some?;
-    lemma_free_in_context(Context(Extend(t.x, t.T, c.m)), x, t.body);
-    assert find(Extend(t.x, t.T, c.m), x).Some?;
+    lemma_free_in_context(extend(t.x, t.T, c), x, t.body);
   }
 }
 
 ghost method corollary_typable_empty__closed(t: tm)
-  requires has_type(Context(Empty), t).Some?;
+  requires has_type(map[], t).Some?;
   ensures closed(t);
 {
-  forall x: nat ensures !appears_free_in(x, t);
+  forall (x:int) ensures x !in fv(t);
   {
-    if (appears_free_in(x, t)) {
-      lemma_free_in_context(Context(Empty), x, t);
-      assert find(Empty, x).Some?;
+    if (x in fv(t)) {
+      lemma_free_in_context(map[], x, t);
       assert false;
     }
-    assert !appears_free_in(x, t);
   }
 }
 
-ghost method lemma_context_invariance(c: context, c': context, t: tm)
+ghost method lemma_context_invariance(c: map<int,ty>, c': map<int,ty>, t: tm)
   requires has_type(c, t).Some?;
-  requires forall x: nat :: appears_free_in(x, t) ==> find(c.m, x) == find(c'.m, x);
+  requires forall x: int :: x in fv(t) ==> find(c, x) == find(c', x);
   ensures has_type(c, t) == has_type(c', t);
   decreases t;
 {
-  if (t.tabs?) {
-    assert find(Extend(t.x, t.T, c.m), t.x) == find(Extend(t.x, t.T, c'.m), t.x);
-    lemma_context_invariance(Context(Extend(t.x, t.T, c.m)), Context(Extend(t.x, t.T, c'.m)), t.body);
-  }
 }
 
-ghost method lemma_substitution_preserves_typing(c: context, x: nat, t': tm, t: tm)
-  requires has_type(Context(Empty), t').Some?;
-  requires has_type(Context(Extend(x, has_type(Context(Empty), t').get, c.m)), t).Some?;
-  ensures has_type(c, subst(x, t', t)) == has_type(Context(Extend(x, has_type(Context(Empty), t').get, c.m)), t);
+ghost method lemma_substitution_preserves_typing(c: map<int,ty>, x: int, t': tm, t: tm)
+  requires has_type(map[], t').Some?;
+  requires has_type(extend(x, has_type(map[], t').get, c), t).Some?;
+  ensures has_type(c, subst(x, t', t)) == has_type(extend(x, has_type(map[], t').get, c), t);
   decreases t;
 {
-  if (t.tvar? && t.id==x) {
-    corollary_typable_empty__closed(t');
-    lemma_context_invariance(Context(Empty), c, t');
+  var T' := has_type(map[], t').get;
+  var c' := extend(x, T', c);
+  var T  := has_type(c', t).get;
+
+  if (t.tvar?) {
+    if (t.id==x) {
+      assert T == T';
+      corollary_typable_empty__closed(t');
+      lemma_context_invariance(map[], c, t');
+    }
   }
   if (t.tabs?) {
-    var U := has_type(Context(Empty), t').get;
     if (t.x==x) {
-      lemma_context_invariance(Context(Extend(x, U, c.m)), c, t);
+      lemma_context_invariance(c', c, t);
     } else {
-      var c_px := Context(Extend(t.x, t.T, Extend(x, U, c.m)));
-      var c_xp := Context(Extend(x, U, Extend(t.x, t.T, c.m)));
-      var c_p := Context(Extend(t.x, t.T, c.m));
-      assert find(c_px.m, x) == find(c_xp.m, x);
-      assert find(c_px.m, t.x) == find(c_xp.m, t.x);
-      lemma_context_invariance(c_px, c_xp, t.body);
-      lemma_substitution_preserves_typing(c_p, x, t', t.body);
+      var cx  := extend(t.x, t.T, c);
+      var c'x := extend(x, T', cx);
+      var cx' := extend(t.x, t.T, c');
+      lemma_context_invariance(cx', c'x, t.body);
+      lemma_substitution_preserves_typing(cx, x, t', t.body);
     }
   }
 }
@@ -246,12 +232,12 @@ ghost method lemma_substitution_preserves_typing(c: context, x: nat, t': tm, t: 
 
 // Preservation
 ghost method theorem_preservation(t: tm)
-  requires has_type(Context(Empty), t).Some?;
+  requires has_type(map[], t).Some?;
   requires step(t).Some?;
-  ensures has_type(Context(Empty), step(t).get) == has_type(Context(Empty), t);
+  ensures has_type(map[], step(t).get) == has_type(map[], t);
 {
   if (t.tapp? && step(t.f).None? && step(t.arg).None?) {
-    lemma_substitution_preserves_typing(Context(Empty), t.f.x, t.arg, t.f.body);
+    lemma_substitution_preserves_typing(map[], t.f.x, t.arg, t.f.body);
   }
 }
 
@@ -269,7 +255,7 @@ function stuck(t: tm): bool
 }
 
 ghost method corollary_soundness(t: tm, t': tm, T: ty, n: nat)
-  requires has_type(Context(Empty), t) == Some(T);
+  requires has_type(map[], t) == Some(T);
   requires reduces_to(t, t', n);
   ensures !stuck(t');
   decreases n;
