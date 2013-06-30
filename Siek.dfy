@@ -21,21 +21,13 @@ datatype exp = Const(c: const) | BinOp(o: op, e1: exp, e2: exp) | Var(x: int) | 
 datatype result<A> = Result(get: A) | Stuck | TimeOut;
 
 datatype pair<A,B> = P(fst: A, snd: B);
-datatype pmap<A,B> = M(m: seq<pair<A,B>>);
-function empty<A,B>(): pmap<A,B>
-{
-  M([])
-}
-function extend<A,B>(k: A, v: B, L: pmap<A,B>): pmap<A,B>
-{
-  M([P(k,v)]+L.m)
-}
+datatype pmap<A,B> = Extend(k: A, v: B, rest: pmap<A,B>) | Empty;
 function lookup<A,B>(k: A, L: pmap<A,B>): result<B>
-  decreases L.m;
+  decreases L;
 {
-  if (L.m==[]) then Stuck() else
-  if (L.m[0].fst==k) then Result(L.m[0].snd) else
-  lookup(k, M(L.m[1..]))
+  match L
+  case Empty => Stuck
+  case Extend(k', v', L') => if (k'==k) then Result(v') else lookup(k, L')
 }
 
 // values v ::= c | <f(x:T)e,env>
@@ -96,7 +88,7 @@ function evf(e: exp, env: pmap<int,value>, k: nat): result<value>
        var clo := toClosure(vf.get);
        if (clo.Result?) then
        var f := clo.get;
-       evf(f.code.body, extend(f.code.paramName, varg.get, extend(f.code.funName, vf.get, f.env)), k-1) else
+       evf(f.code.body, Extend(f.code.paramName, varg.get, Extend(f.code.funName, vf.get, f.env)), k-1) else
        Stuck else
      Stuck else
   Stuck
@@ -104,11 +96,11 @@ function evf(e: exp, env: pmap<int,value>, k: nat): result<value>
 
 predicate evals(e: exp, c: const)
 {
-  exists n:nat :: evf(e, empty(), n) == Result(ConstVal(c))
+  exists n:nat :: evf(e, Empty, n) == Result(ConstVal(c))
 }
 predicate diverges(e: exp)
 {
-  forall n:nat :: evf(e, empty(), n) == TimeOut
+  forall n:nat :: evf(e, Empty, n) == TimeOut
 }
 
 // Type System
@@ -145,7 +137,7 @@ predicate typing(e: exp, G: pmap<int,ty>, T: ty)
   case Const(c) => typeof(c) == Some(T)
   case Fun(c) =>
     T.TArrow? && c.paramType==T.a &&
-    typing(c.body, extend(c.paramName, T.a, extend(c.funName, T, G)), T.b)
+    typing(c.body, Extend(c.paramName, T.a, Extend(c.funName, T, G)), T.b)
   case App(e1, e2) =>
     exists T1 ::
     typing(e1, G, TArrow(T1, T)) &&
@@ -167,7 +159,7 @@ predicate wf_value(v: value, T: ty)
   case ClosureVal(f) =>
     T.TArrow? &&
     exists G :: wf_env(G, f.env) &&
-    typing(f.code.body, extend(f.code.paramName, f.code.paramType, extend(f.code.funName, T, G)), T)
+    typing(f.code.body, Extend(f.code.paramName, f.code.paramType, Extend(f.code.funName, T, G)), T)
 }
 
 predicate wf_result(r: result<value>)
@@ -181,8 +173,9 @@ predicate wf_result(r: result<value>)
 predicate wf_env(G: pmap<int, ty>, env: pmap<int,value>)
   decreases env;
 {
-  |G.m|==|env.m| &&
-  forall i:nat :: 0<i<|env.m| ==> env.m[i].fst==G.m[i].fst && wf_value(env.m[i].snd, G.m[i].snd)
+  match env
+  case Empty => G.Empty?
+  case Extend(k, v, env') => G.Extend? && G.k==k && wf_value(v, G.v) && wf_env(G.rest, env')
 }
 
 // Type Safety in Three Easy Lemmas
@@ -192,4 +185,19 @@ ghost method lemma1_safe_evop(o: op, v1: value, T1: ty, v2: value, T2: ty, R: ty
   requires wf_value(v1, T1) && wf_value(v2, T2);
   ensures evop(o, v1, v2).Result?;
 {
+}
+
+ghost method lemma2_safe_lookup(G: pmap<int, ty>, env: pmap<int,value>, x: int)
+  requires wf_env(G, env);
+  requires lookup(x, G).Result?;
+  ensures lookup(x, env).Result? && wf_value(lookup(x, env).get, lookup(x, G).get);
+  decreases env;
+{
+  match env {
+  case Empty =>
+  case Extend(k, v, env') =>
+    if (k!=x) {
+      lemma2_safe_lookup(G.rest, env', x);
+    }
+  }
 }
