@@ -123,7 +123,11 @@ function typeof(c: const): option<ty>
 }
 
 function typebinop(o: op, t1: ty, t2: ty): option<ty>
-  requires t1.TInt? && t2.TInt?;
+{
+  if (t1.TInt? && t2.TInt?) then typebinop'(o) else None
+}
+
+function typebinop'(o: op): option<ty>
 {
   match o
   case Plus => Some(TInt)
@@ -161,6 +165,7 @@ predicate wf_value(v: value, T: ty)
   case ConstVal(c) =>
     typeof(c) == Some(T)
   case ClosureVal(f) =>
+    T.TArrow? &&
     exists G :: wf_env(G, f.env) &&
     typing(f.code.body, extend(f.code.paramName, f.code.paramType, extend(f.code.funName, T, G)), T)
 }
@@ -178,4 +183,13 @@ predicate wf_env(G: pmap<int, ty>, env: pmap<int,value>)
 {
   |G.m|==|env.m| &&
   forall i:nat :: 0<i<|env.m| ==> env.m[i].fst==G.m[i].fst && wf_value(env.m[i].snd, G.m[i].snd)
+}
+
+// Type Safety in Three Easy Lemmas
+
+ghost method lemma1_safe_evop(o: op, v1: value, T1: ty, v2: value, T2: ty, R: ty)
+  requires typebinop(o, T1, T2)==Some(R);
+  requires wf_value(v1, T1) && wf_value(v2, T2);
+  ensures evop(o, v1, v2).Result?;
+{
 }
