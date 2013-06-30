@@ -20,13 +20,26 @@ datatype exp = Const(c: const) | BinOp(o: op, e1: exp, e2: exp) | Var(x: int) | 
 
 datatype result<A> = Result(get: A) | Stuck | TimeOut;
 
-function lookup<A,B>(k: A, L: map<A,B>): result<B>
+datatype pair<A,B> = P(fst: A, snd: B);
+datatype pmap<A,B> = M(m: seq<pair<A,B>>);
+function empty<A,B>(): pmap<A,B>
 {
-  if (k in L) then Result(L[k]) else Stuck()
+  M([])
+}
+function extend<A,B>(k: A, v: B, L: pmap<A,B>): pmap<A,B>
+{
+  M([P(k,v)]+L.m)
+}
+function lookup<A,B>(k: A, L: pmap<A,B>): result<B>
+  decreases L.m;
+{
+  if (L.m==[]) then Stuck() else
+  if (L.m[0].fst==k) then Result(L.m[0].snd) else
+  lookup(k, M(L.m[1..]))
 }
 
 // values v ::= c | <f(x:T)e,env>
-datatype closure = Closure(code: code, env: map<int,value>);
+datatype closure = Closure(code: code, env: pmap<int,value>);
 datatype value = ConstVal(const: const) | ClosureVal(clo: closure);
 
 function toInt(v: value): result<int>
@@ -63,7 +76,7 @@ function evop(o: op, v1: value, v2: value): result<value>
   else Stuck
 }
 
-function evf(e: exp, env: map<int,value>, k: nat): result<value>
+function evf(e: exp, env: pmap<int,value>, k: nat): result<value>
   decreases k;
 {
   if (k==0) then TimeOut else
@@ -83,7 +96,7 @@ function evf(e: exp, env: map<int,value>, k: nat): result<value>
        var clo := toClosure(vf.get);
        if (clo.Result?) then
        var f := clo.get;
-       evf(f.code.body, f.env[f.code.paramName:=varg.get][f.code.funName:=vf.get], k-1) else
+       evf(f.code.body, extend(f.code.paramName, varg.get, extend(f.code.funName, vf.get, f.env)), k-1) else
        Stuck else
      Stuck else
   Stuck
@@ -91,11 +104,11 @@ function evf(e: exp, env: map<int,value>, k: nat): result<value>
 
 predicate evals(e: exp, c: const)
 {
-  exists n:nat :: evf(e, map[], n) == Result(ConstVal(c))
+  exists n:nat :: evf(e, empty(), n) == Result(ConstVal(c))
 }
 predicate diverges(e: exp)
 {
-  forall n:nat :: evf(e, map[], n) == TimeOut
+  forall n:nat :: evf(e, empty(), n) == TimeOut
 }
 
 // Type System
@@ -118,7 +131,7 @@ function typebinop(o: op, t1: ty, t2: ty): option<ty>
   case Eq => Some(TBool)
 }
 
-predicate typing(e: exp, G: map<int,ty>, T: ty)
+predicate typing(e: exp, G: pmap<int,ty>, T: ty)
   decreases e;
 {
   match e
@@ -128,7 +141,7 @@ predicate typing(e: exp, G: map<int,ty>, T: ty)
   case Const(c) => typeof(c) == Some(T)
   case Fun(c) =>
     T.TArrow? && c.paramType==T.a &&
-    typing(c.body, G[c.paramName:=T.a][c.funName:=T], T.b)
+    typing(c.body, extend(c.paramName, T.a, extend(c.funName, T, G)), T.b)
   case App(e1, e2) =>
     exists T1 ::
     typing(e1, G, TArrow(T1, T)) &&
@@ -141,17 +154,18 @@ predicate typing(e: exp, G: map<int,ty>, T: ty)
 
 // Well-typed values, results, environments
 
-copredicate wf_value(v: value, T: ty)
+predicate wf_value(v: value, T: ty)
+  decreases v;
 {
   match v
   case ConstVal(c) =>
     typeof(c) == Some(T)
   case ClosureVal(f) =>
     exists G :: wf_env(G, f.env) &&
-    typing(f.code.body, G[f.code.paramName:=f.code.paramType][f.code.funName:=T], T)
+    typing(f.code.body, extend(f.code.paramName, f.code.paramType, extend(f.code.funName, T, G)), T)
 }
 
-copredicate wf_result(r: result<value>)
+predicate wf_result(r: result<value>)
 {
   match r
   case Result(v) => exists T :: wf_value(v, T)
@@ -159,9 +173,9 @@ copredicate wf_result(r: result<value>)
   case Stuck => false
 }
 
-predicate wf_env(G: map<int, ty>, env: map<int,value>)
+predicate wf_env(G: pmap<int, ty>, env: pmap<int,value>)
+  decreases env;
 {
-  // TODO: not well-founded!
-  //forall x :: x in env ==> x in G && wf_value(env[x], G[x])
-  true
+  |G.m|==|env.m| &&
+  forall i:nat :: 0<i<|env.m| ==> env.m[i].fst==G.m[i].fst && wf_value(env.m[i].snd, G.m[i].snd)
 }
