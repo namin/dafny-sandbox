@@ -20,7 +20,6 @@ datatype exp = Const(c: const) | BinOp(o: op, e1: exp, e2: exp) | Var(x: int) | 
 
 datatype result<A> = Result(get: A) | Stuck | TimeOut;
 
-datatype pair<A,B> = P(fst: A, snd: B);
 datatype pmap<A,B> = Extend(k: A, v: B, rest: pmap<A,B>) | Empty;
 function lookup<A,B>(k: A, L: pmap<A,B>): result<B>
   decreases L;
