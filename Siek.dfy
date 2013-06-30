@@ -172,7 +172,14 @@ predicate wf_value(v: value, T: ty)
     typing(f.code.body, Extend(f.code.paramName, T.a, Extend(f.code.funName, T, G)), T.b)
 }
 
-ghost method wf_value_inversion_TArrow(v: value, T: ty) returns (G: pmap<int,ty>)
+ghost method wf_value_inversion_const(v: value, T: ty)
+  requires wf_value(v, T);
+  requires T.TInt? || T.TBool?;
+  ensures v.ConstVal?;
+{
+}
+
+ghost method wf_value_inversion_fun(v: value, T: ty) returns (G: pmap<int,ty>)
   requires wf_value(v, T);
   requires T.TArrow?;
   ensures v.ClosureVal?;
@@ -258,7 +265,7 @@ ghost method lemma3_safe_evf(G: pmap<int, ty>, env: pmap<int,value>, T: ty, e: e
     var fo := evf(e.f, env, k-1);
     var arg := evf(e.arg, env, k-1);
     if (fo.Result? && arg.Result?) {
-      var Gf := wf_value_inversion_TArrow(fo.get, TArrow(T1, T));
+      var Gf := wf_value_inversion_fun(fo.get, TArrow(T1, T));
       assert fo.get.ClosureVal?;
       var f := fo.get.clo;
       var G' := Extend(f.code.paramName, T1, Extend(f.code.funName, TArrow(T1, T), Gf));
@@ -269,4 +276,20 @@ ghost method lemma3_safe_evf(G: pmap<int, ty>, env: pmap<int,value>, T: ty, e: e
       assert fo.TimeOut? || arg.TimeOut?;
     }
   } else {}
+}
+
+ghost method theorem_type_safety(e: exp, T: ty)
+  requires typing(e, Empty, T);
+  requires T.TInt? || T.TBool?;
+  ensures (exists c :: evals(e, c)) || diverges(e);
+{
+  if (!diverges(e)) {
+    var k':nat :| !evf(e, Empty, k').TimeOut?;
+    lemma3_safe_evf(Empty, Empty, T, e, k');
+    var v := evf(e, Empty, k');
+    assert v.Result?;
+    wf_value_inversion_const(v.get, T);
+    assert v.get.ConstVal?;
+    assert evals(e, v.get.const);
+  }
 }
