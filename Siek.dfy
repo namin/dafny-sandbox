@@ -68,6 +68,12 @@ function evop(o: op, v1: value, v2: value): result<value>
   else Stuck
 }
 
+function chain<A>(v1: result<A>, v2: result<A>): result<A>
+  requires !v1.Result? || !v2.Result?;
+{
+  if (v1.Result?) then v2 else v1
+}
+
 function evf(e: exp, env: pmap<int,value>, k: nat): result<value>
   decreases k;
 {
@@ -80,7 +86,7 @@ function evf(e: exp, env: pmap<int,value>, k: nat): result<value>
      var v2 := evf(e.e2, env, k-1);
      if (v1.Result? && v2.Result?) then
      evop(e.o, v1.get, v2.get) else
-     Stuck else
+     chain(v1, v2) else
   if (e.App?) then
      var vf    := evf(e.f, env, k-1);
      var varg  := evf(e.arg, env, k-1);
@@ -90,7 +96,7 @@ function evf(e: exp, env: pmap<int,value>, k: nat): result<value>
        var f := clo.get;
        evf(f.code.body, Extend(f.code.paramName, varg.get, Extend(f.code.funName, vf.get, f.env)), k-1) else
        Stuck else
-     Stuck else
+     chain(vf, varg) else
   Stuck
 }
 
@@ -108,6 +114,9 @@ predicate diverges(e: exp)
 datatype option<A> = Some(get: A) | None;
 
 function typeof(c: const): option<ty>
+  ensures c.Num? ==> typeof(c).Some? && typeof(c).get.TInt?;
+  ensures c.Bool? ==> typeof(c).Some? && typeof(c).get.TBool?;
+  ensures typeof(c).Some? ==> !typeof(c).get.TArrow?;
 {
   match c
   case Num(n) => Some(TInt)
@@ -141,7 +150,7 @@ predicate typing(e: exp, G: pmap<int,ty>, T: ty)
   case App(e1, e2) =>
     exists T1 ::
     typing(e1, G, TArrow(T1, T)) &&
-    typing(e2, G, T)
+    typing(e2, G, T1)
   case BinOp(o, e1, e2) =>
     typing(e1, G, TInt) &&
     typing(e2, G, TInt) &&
@@ -158,8 +167,22 @@ predicate wf_value(v: value, T: ty)
     typeof(c) == Some(T)
   case ClosureVal(f) =>
     T.TArrow? &&
+    f.code.paramType==T.a &&
     exists G :: wf_env(G, f.env) &&
-    typing(f.code.body, Extend(f.code.paramName, f.code.paramType, Extend(f.code.funName, T, G)), T)
+    typing(f.code.body, Extend(f.code.paramName, T.a, Extend(f.code.funName, T, G)), T.b)
+}
+
+ghost method wf_value_inversion_TArrow(v: value, T: ty) returns (G: pmap<int,ty>)
+  requires wf_value(v, T);
+  requires T.TArrow?;
+  ensures v.ClosureVal?;
+  ensures wf_env(G, v.clo.env) &&
+          typing(v.clo.code.body, Extend(v.clo.code.paramName, T.a, Extend(v.clo.code.funName, T, G)), T.b);
+{
+  var G_ :|
+  wf_env(G_, v.clo.env) &&
+  typing(v.clo.code.body, Extend(v.clo.code.paramName, T.a, Extend(v.clo.code.funName, T, G_)), T.b);
+  G := G_;
 }
 
 predicate wf_result(r: result<value>)
@@ -180,8 +203,8 @@ predicate wf_env(G: pmap<int, ty>, env: pmap<int,value>)
 
 // Type Safety in Three Easy Lemmas
 
-ghost method lemma1_safe_evop(o: op, v1: value, T1: ty, v2: value, T2: ty, R: ty)
-  requires typebinop(o, T1, T2)==Some(R);
+ghost method lemma1_safe_evop(o: op, v1: value, T1: ty, v2: value, T2: ty)
+  requires typebinop(o, T1, T2).Some?;
   requires wf_value(v1, T1) && wf_value(v2, T2);
   ensures evop(o, v1, v2).Result?;
 {
@@ -200,4 +223,50 @@ ghost method lemma2_safe_lookup(G: pmap<int, ty>, env: pmap<int,value>, x: int)
       lemma2_safe_lookup(G.rest, env', x);
     }
   }
+}
+
+ghost method lemma3_safe_evf(G: pmap<int, ty>, env: pmap<int,value>, T: ty, e: exp, k: nat)
+  requires typing(e, G, T);
+  requires wf_env(G, env);
+  ensures evf(e, env, k).Result? || evf(e, env, k).TimeOut?;
+  ensures !evf(e, env, k).Stuck?;
+  ensures evf(e, env, k).Result? ==> wf_value(evf(e, env, k).get, T);
+  decreases k;
+{
+  if (k==0) {
+  } else if (e.Var?) {
+    lemma2_safe_lookup(G, env, e.x);
+  } else if (e.Const?) {
+  } else if (e.Fun?) {
+  } else if (e.BinOp?) {
+    lemma3_safe_evf(G, env, TInt, e.e1, k-1);
+    lemma3_safe_evf(G, env, TInt, e.e2, k-1);
+    var v1 := evf(e.e1, env, k-1);
+    var v2 := evf(e.e2, env, k-1);
+    if (v1.Result? && v2.Result?) {
+      lemma1_safe_evop(e.o, v1.get, TInt, v2.get, TInt);
+    } else {
+      assert v1.TimeOut? || v2.TimeOut?;
+    }
+  } else if (e.App?) {
+    var T1 :|
+    typing(e.f, G, TArrow(T1, T)) &&
+    typing(e.arg, G, T1);
+
+    lemma3_safe_evf(G, env, TArrow(T1, T), e.f, k-1);
+    lemma3_safe_evf(G, env, T1, e.arg, k-1);
+    var fo := evf(e.f, env, k-1);
+    var arg := evf(e.arg, env, k-1);
+    if (fo.Result? && arg.Result?) {
+      var Gf := wf_value_inversion_TArrow(fo.get, TArrow(T1, T));
+      assert fo.get.ClosureVal?;
+      var f := fo.get.clo;
+      var G' := Extend(f.code.paramName, T1, Extend(f.code.funName, TArrow(T1, T), Gf));
+      var env' := Extend(f.code.paramName, arg.get, Extend(f.code.funName, fo.get, f.env));
+      assert wf_env(G', env');
+      lemma3_safe_evf(G', env', T, f.code.body, k-1);
+    } else {
+      assert fo.TimeOut? || arg.TimeOut?;
+    }
+  } else {}
 }
