@@ -13,13 +13,13 @@ datatype option<A> = None | Some(get: A);
 /// Syntax
 
 // Types
-datatype ty =  TBool                  // (base type for boolean)
-            |  TArrow(T1: ty, T2: ty) // T1 => T2
+datatype ty =  TBool                             // (base type for boolean)
+            |  TArrow(T1: ty, T2: ty)            // T1 => T2
 //?NAT
-            |  TNat                   // (base type for naturals)
+            |  TNat                              // (base type for naturals)
 //NAT?
 //?REC
-            | TVar(id: int) | TRec(X: nat, T: ty)
+            | TVar(id: int) | TRec(X: nat, T: ty)// (iso-recursive types)
 //REC?
             ;
 
@@ -34,7 +34,7 @@ datatype tm = tvar(id: int)                      // x                  (variable
             | teq(n1: tm, n2: tm)                //                    (equality on naturals)
 //NAT?
 //?REC
-            | tfold(Tf: ty, tf: tm) | tunfold(Tu: ty, tu: tm)
+            | tfold(Tf: ty, tf: tm) | tunfold(Tu: ty, tu: tm)//        (iso-recursive terms)
 //REC?
             ;
 
