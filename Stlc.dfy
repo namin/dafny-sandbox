@@ -29,7 +29,7 @@ datatype ty =  TBase                             // (opaque base type)
 // Terms
 datatype tm = tvar(id: int)                      // x                  (variable)
             | tapp(f: tm, arg: tm)               // t t                (application)
-            | tabs(x: int, T: ty, body: tm)      // \x.t               (abstraction)
+            | tabs(x: int, T: ty, body: tm)      // \x:T.t             (abstraction)
 /*BOOL?
             | ttrue | tfalse                     // true, false        (boolean values)
             | tif(c: tm, a: tm, b: tm)           // if t then t else t (if expression)
