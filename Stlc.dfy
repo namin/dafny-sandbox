@@ -47,7 +47,7 @@ function subst(x: int, s: tm, t: tm): tm //[x -> s]t
   match t
   // interesting cases...
   case tvar(x') => if x==x' then s else t
-  // NB: only capture-avoiding if s is closed...
+  // N.B. only capture-avoiding if s is closed...
   case tabs(x', T, t1) => tabs(x', T, if x==x' then t1 else subst(x, s, t1))
   // congruent cases...
   case tapp(t1, t2) => tapp(subst(x, s, t1), subst(x, s, t2))
@@ -177,12 +177,6 @@ ghost method theorem_progress(t: tm)
 
 // Towards preservation and the substitution lemma
 
-// We're only interested in closed terms.
-predicate closed(t: tm)
-{
-  forall x :: x !in fv(t)
-}
-
 // If x is free in t and t is well-typed in some context,
 // then this context must contain x.
 ghost method {:induction c, t} lemma_free_in_context(c: map<int,ty>, x: int, t: tm)
@@ -191,6 +185,13 @@ ghost method {:induction c, t} lemma_free_in_context(c: map<int,ty>, x: int, t: 
   ensures find(c, x).Some?;
   decreases t;
 {
+}
+
+// A closed term does not contain any free variables.
+// N.B. We're only interested in proving type soundness of closed terms.
+predicate closed(t: tm)
+{
+  forall x :: x !in fv(t)
 }
 
 // If a term can be well-typed in an empty context,
