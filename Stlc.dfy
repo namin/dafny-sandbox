@@ -1,10 +1,10 @@
 // Proving type safety of the Simply Typed Lambda-Calculus in Dafny
 // adapted from Coq (http://www.cis.upenn.edu/~bcpierce/sf/Stlc.html)
 
-// Utilities
+/// Utilities
 datatype option<A> = None | Some(get: A);
 
-// Syntax
+/// Syntax
 
 // Types
 datatype ty = TBool |                 // (base type for boolean)       
@@ -18,7 +18,7 @@ datatype tm = tvar(id: int) |                  // x                  (variable)
               tif(c: tm, a: tm, b: tm);        // if t then t else t (if expression)
 
 
-// Operational Semantics
+/// Operational Semantics
 
 // Values
 function value(t: tm): bool
@@ -85,7 +85,7 @@ ghost method lemma_step_example1(n: nat)
 }
 
 
-// Typing
+/// Typing
 
 // A context is a partial map from variable names to types.
 function find(c: map<int,ty>, x: int): option<ty>
@@ -172,7 +172,7 @@ ghost method nonexample_typing_3(S: ty, T: ty)
 }
 
 
-// Type-Safety Properties
+/// Type-Safety Properties
 
 // We're only interested in closed terms.
 predicate closed(t: tm)
@@ -231,6 +231,10 @@ ghost method lemma_context_invariance(c: map<int,ty>, c': map<int,ty>, t: tm)
 {
 }
 
+// Substitution preserves typing:
+// If  s has type S in an empty context,
+// and t has type T in a context extended with x having type S,
+// then [x -> s]t has type T as well.
 ghost method lemma_substitution_preserves_typing(c: map<int,ty>, x: int, s: tm, t: tm)
   requires has_type(map[], s).Some?;
   requires has_type(extend(x, has_type(map[], s).get, c), t).Some?;
@@ -274,9 +278,6 @@ ghost method theorem_preservation(t: tm)
   }
 }
 
-
-// Type Soundness
-
 // A normal form cannot step.
 predicate normal_form(t: tm)
 {
@@ -304,4 +305,4 @@ ghost method corollary_soundness(t: tm, t': tm, T: ty, n: nat)
   }
 }
 
-// QED
+/// QED
