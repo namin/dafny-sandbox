@@ -7,11 +7,15 @@ datatype option<A> = None | Some(get: A);
 // Syntax
 
 // Types
-datatype ty = TBool | TArrow(paramT: ty, bodyT: ty);
+datatype ty = TBool |                 // (base type for boolean)       
+              TArrow(T1: ty, T2: ty); // T1 => T2
 
 // Terms
-datatype tm = tvar(id: int) | tapp(f: tm, arg: tm) | tabs(x: int, T: ty, body: tm) |
-              ttrue | tfalse | tif(c: tm, a: tm, b: tm);
+datatype tm = tvar(id: int) |                  // x                  (variable)
+              tapp(f: tm, arg: tm) |           // t t                (application)
+              tabs(x: int, T: ty, body: tm) |  // \x.t               (abstraction)
+              ttrue | tfalse |                 // true, false        (boolean values)
+              tif(c: tm, a: tm, b: tm);        // if t then t else t (if expression)
 
 
 // Operational Semantics
@@ -23,7 +27,8 @@ function value(t: tm): bool
 }
 
 // Free Variables and Substitution
-function fv(t: tm): set<int>
+
+function fv(t: tm): set<int> //of free variables of t
 {
   match t
   case tvar(id) => {id}
@@ -33,7 +38,8 @@ function fv(t: tm): set<int>
   case ttrue => {}
   case tfalse => {}
 }
-function subst(x: int, s: tm, t: tm): tm
+
+function subst(x: int, s: tm, t: tm): tm //[x -> s]t
 {
   match t
   case tvar(x') => if x==x' then s else t
@@ -47,17 +53,24 @@ function subst(x: int, s: tm, t: tm): tm
 // Reduction
 function step(t: tm): option<tm>
 {
-  /* AppAbs */     if (t.tapp? && t.f.tabs? && value(t.arg)) then Some(subst(t.f.x, t.arg, t.f.body))
-  /* App1 */       else if (t.tapp? && step(t.f).Some?) then Some(tapp(step(t.f).get, t.arg))
-  /* App2 */       else if (t.tapp? && step(t.arg).Some?) then Some(tapp(t.f, step(t.arg).get))
-  /* IfTrue */     else if (t.tif? && t.c == ttrue) then Some(t.a)
-  /* IfFalse */    else if (t.tif? && t.c == tfalse) then Some(t.b)
-  /* If */         else if (t.tif? && step(t.c).Some?) then Some(tif(step(t.c).get, t.a, t.b))
-                   else None
+  /* AppAbs */     if (t.tapp? && t.f.tabs? && value(t.arg)) then
+  Some(subst(t.f.x, t.arg, t.f.body))
+  /* App1 */       else if (t.tapp? && step(t.f).Some?) then
+  Some(tapp(step(t.f).get, t.arg))
+  /* App2 */       else if (t.tapp? && step(t.arg).Some?) then
+  Some(tapp(t.f, step(t.arg).get))
+  /* IfTrue */     else if (t.tif? && t.c == ttrue) then
+  Some(t.a)
+  /* IfFalse */    else if (t.tif? && t.c == tfalse) then
+  Some(t.b)
+  /* If */         else if (t.tif? && step(t.c).Some?) then
+  Some(tif(step(t.c).get, t.a, t.b))
+  else None
 }
 
+// Multistep reduction:
 // The term t reduces to the term t' in n or less number of steps.
-function reduces_to(t: tm, t': tm, n: nat): bool
+predicate reduces_to(t: tm, t': tm, n: nat)
   decreases n;
 {
   t == t' || (n > 0 && step(t).Some? && reduces_to(step(t).get, t', n-1))
@@ -89,25 +102,30 @@ function has_type(c: map<int,ty>, t: tm): option<ty>
   decreases t;
 {
   match t
-  /* Var */        case tvar(id) => find(c, id)
+  /* Var */        case tvar(id) =>
+  find(c, id)
   /* Abs */        case tabs(x, T, body) =>
                      var ty_body := has_type(extend(x, T, c), body);
-                     if (ty_body.Some?) then Some(TArrow(T, ty_body.get)) else None
+                     if (ty_body.Some?) then
+  Some(TArrow(T, ty_body.get))
+                     else None
   /* App */        case tapp(f, arg) =>
                      var ty_f := has_type(c, f);
                      var ty_arg := has_type(c, arg);
-                     if (ty_f.Some? && ty_arg.Some? && ty_f.get.TArrow? && ty_f.get.paramT == ty_arg.get)
-                     then Some(ty_f.get.bodyT)
+                     if (ty_f.Some? && ty_arg.Some? && ty_f.get.TArrow? && ty_f.get.T1 == ty_arg.get) then
+ Some(ty_f.get.T2)
                      else None
- /* True */        case ttrue => Some(TBool)
- /* False */       case tfalse => Some(TBool)
+ /* True */        case ttrue =>
+ Some(TBool)
+ /* False */       case tfalse =>
+ Some(TBool)
  /* If */          case tif(cond, a, b) =>
                      var ty_c := has_type(c, cond);
                      var ty_a := has_type(c, a);
                      var ty_b := has_type(c, b);
-                     if (ty_c.Some? && ty_a.Some? && ty_b.Some? && ty_c.get == TBool && ty_a.get == ty_b.get)
-                     then ty_a
-                     else None
+                     if (ty_c.Some? && ty_a.Some? && ty_b.Some? && ty_c.get == TBool && ty_a.get == ty_b.get) then
+ ty_a
+ else None
 }
 
 // Examples
@@ -152,7 +170,8 @@ predicate closed(t: tm)
   forall x :: x !in fv(t)
 }
 
-// Progress
+// Progress:
+// A well-typed term is either a value or it can step.
 ghost method theorem_progress(t: tm)
   requires has_type(map[], t).Some?;
   ensures value(t) || step(t).Some?;
@@ -161,6 +180,8 @@ ghost method theorem_progress(t: tm)
 
 // Towards the substitution lemma
 
+// If x is free in t and t is well-typed in some context,
+// then this context must contain x.
 ghost method {:induction t} lemma_free_in_context(c: map<int,ty>, x: int, t: tm)
   requires x in fv(t);
   requires has_type(c, t).Some?;
@@ -173,6 +194,8 @@ ghost method {:induction t} lemma_free_in_context(c: map<int,ty>, x: int, t: tm)
   }
 }
 
+// If a term can be well-typed in an empty context,
+// then is is closed.
 ghost method corollary_typable_empty__closed(t: tm)
   requires has_type(map[], t).Some?;
   ensures closed(t);
@@ -186,6 +209,10 @@ ghost method corollary_typable_empty__closed(t: tm)
   }
 }
 
+// If a term t is well-typed in context c,
+//    and context c' agrees with c on all free variables of t,
+// then the term t is well-typed in context c',
+//      with the same type as in context c.
 ghost method lemma_context_invariance(c: map<int,ty>, c': map<int,ty>, t: tm)
   requires has_type(c, t).Some?;
   requires forall x: int :: x in fv(t) ==> find(c, x) == find(c', x);
@@ -194,38 +221,39 @@ ghost method lemma_context_invariance(c: map<int,ty>, c': map<int,ty>, t: tm)
 {
 }
 
-ghost method lemma_substitution_preserves_typing(c: map<int,ty>, x: int, t': tm, t: tm)
-  requires has_type(map[], t').Some?;
-  requires has_type(extend(x, has_type(map[], t').get, c), t).Some?;
-  ensures has_type(c, subst(x, t', t)) == has_type(extend(x, has_type(map[], t').get, c), t);
+ghost method lemma_substitution_preserves_typing(c: map<int,ty>, x: int, s: tm, t: tm)
+  requires has_type(map[], s).Some?;
+  requires has_type(extend(x, has_type(map[], s).get, c), t).Some?;
+  ensures has_type(c, subst(x, s, t)) == has_type(extend(x, has_type(map[], s).get, c), t);
   decreases t;
 {
-  var T' := has_type(map[], t').get;
-  var c' := extend(x, T', c);
-  var T  := has_type(c', t).get;
+  var S := has_type(map[], s).get;
+  var cs := extend(x, S, c);
+  var T  := has_type(cs, t).get;
 
   if (t.tvar?) {
     if (t.id==x) {
-      assert T == T';
-      corollary_typable_empty__closed(t');
-      lemma_context_invariance(map[], c, t');
+      assert T == S;
+      corollary_typable_empty__closed(s);
+      lemma_context_invariance(map[], c, s);
     }
   }
   if (t.tabs?) {
     if (t.x==x) {
-      lemma_context_invariance(c', c, t);
+      lemma_context_invariance(cs, c, t);
     } else {
       var cx  := extend(t.x, t.T, c);
-      var c'x := extend(x, T', cx);
-      var cx' := extend(t.x, t.T, c');
-      lemma_context_invariance(cx', c'x, t.body);
-      lemma_substitution_preserves_typing(cx, x, t', t.body);
+      var csx := extend(x, S, cx);
+      var cxs := extend(t.x, t.T, cs);
+      lemma_context_invariance(cxs, csx, t.body);
+      lemma_substitution_preserves_typing(cx, x, s, t.body);
     }
   }
 }
 
 
-// Preservation
+// Preservation:
+// A well-type term which steps preserves its type.
 ghost method theorem_preservation(t: tm)
   requires has_type(map[], t).Some?;
   requires step(t).Some?;
@@ -239,16 +267,20 @@ ghost method theorem_preservation(t: tm)
 
 // Type Soundness
 
-function normal_form(t: tm): bool
+// A normal form cannot step.
+predicate normal_form(t: tm)
 {
   step(t).None?
 }
 
-function stuck(t: tm): bool
+// A stuck term is a normal form that is not a value.
+predicate stuck(t: tm)
 {
   normal_form(t) && !value(t)
 }
 
+// Type soundness:
+// A well-typed term cannot be stuck.
 ghost method corollary_soundness(t: tm, t': tm, T: ty, n: nat)
   requires has_type(map[], t) == Some(T);
   requires reduces_to(t, t', n);
@@ -261,3 +293,5 @@ ghost method corollary_soundness(t: tm, t': tm, T: ty, n: nat)
    corollary_soundness(step(t).get, t', T, n-1);
   }
 }
+
+// QED
