@@ -1,4 +1,4 @@
-// Proving type safety of a Simply Typed Lambda-Calculus in Dafny
+﻿// Proving type safety of a Simply Typed Lambda-Calculus in Dafny
 // adapted from Coq (http://www.cis.upenn.edu/~bcpierce/sf/Stlc.html)
 
 /// Utilities
@@ -34,7 +34,7 @@ datatype tm = tvar(id: int)                      // x                  (variable
             | teq(n1: tm, n2: tm)                //                    (equality on naturals)
 //NAT?
 //?REC
-            | tfold(Tf: ty, tf: tm) | tunfold(Tu: ty, tu: tm)//        (iso-recursive terms)
+            | tfold(Tf: ty, tf: tm) | tunfold(tu: tm)//                (iso-recursive terms)
 //REC?
             ;
 
@@ -80,7 +80,7 @@ function fv(t: tm): set<int> //of free variables of t
 //NAT?
 //?REC
   case tfold(T, t1) => fv(t1)
-  case tunfold(T, t1) => fv(t1)
+  case tunfold(t1) => fv(t1)
 //REC?
 }
 
@@ -104,7 +104,7 @@ function subst(x: int, s: tm, t: tm): tm //[x -> s]t
 //NAT?
 //?REC
   case tfold(T, t1) => tfold(T, subst(x, s, t1))
-  case tunfold(T, t1) => tunfold(T, subst(x, s, t1))
+  case tunfold(t1) => tunfold(subst(x, s, t1))
 //REC?
 }
 
@@ -180,7 +180,7 @@ function step(t: tm): option<tm>
 //?REC
   /* UnfoldFold */ else if (t.tunfold? && t.tu.tfold? && value(t.tu.tf)) then Some(t.tu.tf)
   /* Fold */       else if (t.tfold? && step(t.tf).Some?) then Some(tfold(t.Tf, step(t.tf).get))
-  /* Unfold */     else if (t.tunfold? && step(t.tu).Some?) then Some(tunfold(t.Tu, step(t.tu).get))
+  /* Unfold */     else if (t.tunfold? && step(t.tu).Some?) then Some(tunfold(step(t.tu).get))
 //REC?
   else None
 }
@@ -265,10 +265,10 @@ function has_type(c: map<int,ty>, t: tm): option<ty>
                      if (U.TRec? && ty_t1.Some? && ty_t1.get==tsubst(U.X, U, U.T))
                      then Some(U)
                      else None
-/* Unfold */       case tunfold(U, t1) =>
-                     var ty_t1 := if (ty_closed(U)) then has_type(c, t1) else None;
-                     if (U.TRec? && ty_t1.Some? && ty_t1.get==U)
-                     then Some(tsubst(U.X, U, U.T))
+/* Unfold */       case tunfold(t1) =>
+                     var ty_t1 := has_type(c, t1);
+                     if (ty_t1.Some? && ty_t1.get.TRec?)
+                     then var U := ty_t1.get; Some(tsubst(U.X, U, U.T))
                      else None
 //REC?
 }
@@ -318,7 +318,24 @@ ghost method example_typing_nat()
 //?REC
 // TODO
 ghost method example_typing_rec()
+  // ∅ |- foldµT. T→α(λx : µT. T → α. (unfold x) x) : µT. T → α
+  ensures has_type(map[], tfold(TRec(0, TArrow(TVar(0), TBool)), tabs(0, TRec(0, TArrow(TVar(0), TBool)), tapp(tunfold(tvar(0)), tvar(0))))) ==
+          Some(TRec(0, TArrow(TVar(0), TBool)));
 {
+  var R := TRec(0, TArrow(TVar(0), TBool));
+  var c := extend(0, R, map[]);
+  //{x : µT. T → α}  x : µT. T → α
+  assert has_type(c, tvar(0)) == Some(R);
+  //{x : µT. T → α}  (unfold x):(µT. T → α) → α {x : µT. T → α}  x : µT. T → α
+  assert tsubst(R.X, R, R.T) == TArrow(R, TBool);
+  assert has_type(c, tunfold(tvar(0))) == Some(TArrow(R, TBool));
+  //{x : µT. T → α}  ( (unfold x) x)) : α
+  assert has_type(c, tapp(tunfold(tvar(0)), tvar(0))) == Some(TBool);
+  //∅  (λx : µT. T → α. (unfold x) x)) :(µT. T → α) → α
+  assert has_type(map[], tabs(0, R, tapp(tunfold(tvar(0)), tvar(0)))) == Some(TArrow(R, TBool));
+  assert ty_fv(R)==ty_fv(TArrow(TVar(0),TBool))-{0}=={};
+  assert ty_closed(R);
+  assert has_type(map[], tfold(TRec(0, TArrow(TVar(0), TBool)), tabs(0, TRec(0, TArrow(TVar(0), TBool)), tapp(tunfold(tvar(0)), tvar(0))))).Some?;
 }
 //REC?
 
