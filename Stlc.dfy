@@ -12,6 +12,7 @@ datatype option<A> = None | Some(get: A);
 datatype ty =  TBool                  // (base type for boolean)
             |  TArrow(T1: ty, T2: ty) // T1 => T2
             ;
+
 // Terms
 datatype tm = tvar(id: int)                      // x                  (variable)
             | tapp(f: tm, arg: tm)               // t t                (application)
@@ -63,7 +64,7 @@ function step(t: tm): option<tm>
   Some(subst(t.f.x, t.arg, t.f.body))
   /* App1 */       else if (t.tapp? && step(t.f).Some?) then
   Some(tapp(step(t.f).get, t.arg))
-  /* App2 */       else if (t.tapp? && step(t.arg).Some?) then
+  /* App2 */       else if (t.tapp? && value(t.f) && step(t.arg).Some?) then
   Some(tapp(t.f, step(t.arg).get))
   /* IfTrue */     else if (t.tif? && t.c == ttrue) then
   Some(t.a)
@@ -118,7 +119,7 @@ function has_type(c: map<int,ty>, t: tm): option<ty>
   var ty_arg := has_type(c, arg);
                      if (ty_f.Some? && ty_arg.Some?) then
   if ty_f.get.TArrow? && ty_f.get.T1 == ty_arg.get then
-  Some(ty_f.get.T2)              else None else None
+  Some(ty_f.get.T2)  else None else None
   /* True */  case ttrue => Some(TBool)
   /* False */ case tfalse => Some(TBool)
   /* If */    case tif(cond, a, b) =>
@@ -263,7 +264,7 @@ ghost method theorem_preservation(t: tm)
   requires step(t).Some?;
   ensures has_type(map[], step(t).get) == has_type(map[], t);
 {
-  if (t.tapp? && step(t.f).None? && step(t.arg).None?) {
+  if (t.tapp? && value(t.f) && value(t.arg)) {
     lemma_substitution_preserves_typing(map[], t.f.x, t.arg, t.f.body);
   }
 }
