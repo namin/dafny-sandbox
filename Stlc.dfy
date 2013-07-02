@@ -236,7 +236,7 @@ ghost method nonexample_typing_1()
 ghost method nonexample_typing_3(S: ty, T: ty)
   ensures has_type(map[], tabs(0, S, tapp(tvar(0), tvar(0)))) != Some(T);
 {
-  var c:= extend(0, S, map[]);
+  var c := extend(0, S, map[]);
   assert has_type(c, tapp(tvar(0), tvar(0))) == None;
 }
 
@@ -244,6 +244,8 @@ ghost method nonexample_typing_3(S: ty, T: ty)
 ghost method example_typing_nat()
   ensures has_type(map[], tabs(0, TNat, tprev(tvar(0)))) == Some(TArrow(TNat, TNat));
 {
+  var c := extend(0, TNat, map[]);
+  assert has_type(c, tprev(tvar(0)))==Some(TNat);
 }
 ?*/
 
