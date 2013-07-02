@@ -167,12 +167,6 @@ ghost method nonexample_typing_3(S: ty, T: ty)
 
 /// Type-Safety Properties
 
-// We're only interested in closed terms.
-predicate closed(t: tm)
-{
-  forall x :: x !in fv(t)
-}
-
 // Progress:
 // A well-typed term is either a value or it can step.
 ghost method theorem_progress(t: tm)
@@ -181,20 +175,22 @@ ghost method theorem_progress(t: tm)
 {
 }
 
-// Towards the substitution lemma
+// Towards preservation and the substitution lemma
+
+// We're only interested in closed terms.
+predicate closed(t: tm)
+{
+  forall x :: x !in fv(t)
+}
 
 // If x is free in t and t is well-typed in some context,
 // then this context must contain x.
-ghost method {:induction t} lemma_free_in_context(c: map<int,ty>, x: int, t: tm)
+ghost method {:induction c, t} lemma_free_in_context(c: map<int,ty>, x: int, t: tm)
   requires x in fv(t);
   requires has_type(c, t).Some?;
   ensures find(c, x).Some?;
   decreases t;
 {
-  if (t.tabs?) {
-    assert t.x != x;
-    lemma_free_in_context(extend(t.x, t.T, c), x, t.body);
-  }
 }
 
 // If a term can be well-typed in an empty context,
