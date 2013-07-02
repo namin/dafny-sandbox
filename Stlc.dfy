@@ -1,7 +1,9 @@
-// Proving type safety of the Simply Typed Lambda-Calculus in Dafny
+// Proving type safety of a Simply Typed Lambda-Calculus in Dafny
 // adapted from Coq (http://www.cis.upenn.edu/~bcpierce/sf/Stlc.html)
 
 /// Utilities
+
+// ... handy for partial functions
 datatype option<A> = None | Some(get: A);
 
 /// Syntax
@@ -20,7 +22,7 @@ datatype tm = tvar(id: int)                      // x                  (variable
 /// Operational Semantics
 
 // Values
-function value(t: tm): bool
+predicate value(t: tm)
 {
   t.tabs? || t.ttrue? || t.tfalse?
 }
@@ -30,9 +32,11 @@ function value(t: tm): bool
 function fv(t: tm): set<int> //of free variables of t
 {
   match t
+  // interesting cases...
   case tvar(id) => {id}
+  case tabs(x, T, body) => fv(body)-{x}//x is bound
+  // congruent cases...
   case tapp(f, arg) => fv(f)+fv(arg)
-  case tabs(x, T, body) => fv(body)-{x}
   case tif(c, a, b) => fv(a)+fv(b)+fv(c)
   case ttrue => {}
   case tfalse => {}
@@ -41,8 +45,11 @@ function fv(t: tm): set<int> //of free variables of t
 function subst(x: int, s: tm, t: tm): tm //[x -> s]t
 {
   match t
+  // interesting cases...
   case tvar(x') => if x==x' then s else t
+  // NB: only capture-avoiding if s is closed...
   case tabs(x', T, t1) => tabs(x', T, if x==x' then t1 else subst(x, s, t1))
+  // congruent cases...
   case tapp(t1, t2) => tapp(subst(x, s, t1), subst(x, s, t2))
   case ttrue => ttrue
   case tfalse => tfalse
@@ -101,39 +108,26 @@ function has_type(c: map<int,ty>, t: tm): option<ty>
   decreases t;
 {
   match t
-  /* Var */
-  case tvar(id) =>
-  find(c, id)
-  /* Abs */
-  case tabs(x, T, body) =>
+  /* Var */  case tvar(id) => find(c, id)
+  /* Abs */  case tabs(x, T, body) =>
   var ty_body := has_type(extend(x, T, c), body);
                      if (ty_body.Some?) then
-  Some(TArrow(T, ty_body.get))
-                     else None
-  /* App */
-  case tapp(f, arg) =>
+  Some(TArrow(T, ty_body.get))          else None
+  /* App */  case tapp(f, arg) =>
   var ty_f   := has_type(c, f);
   var ty_arg := has_type(c, arg);
                      if (ty_f.Some? && ty_arg.Some?) then
-  if  ty_f.get.TArrow? &&
-      ty_f.get.T1 == ty_arg.get then
- Some(ty_f.get.T2)
-                     else None else None
- /* True */
- case ttrue =>
- Some(TBool)
- /* False */
- case tfalse =>
- Some(TBool)
- /* If */
- case tif(cond, a, b) =>
- var ty_c := has_type(c, cond);
- var ty_a := has_type(c, a);
- var ty_b := has_type(c, b);
+  if ty_f.get.TArrow? && ty_f.get.T1 == ty_arg.get then
+  Some(ty_f.get.T2)              else None else None
+  /* True */  case ttrue => Some(TBool)
+  /* False */ case tfalse => Some(TBool)
+  /* If */    case tif(cond, a, b) =>
+  var ty_c := has_type(c, cond);
+  var ty_a := has_type(c, a);
+  var ty_b := has_type(c, b);
                      if (ty_c.Some? && ty_a.Some? && ty_b.Some?) then
- if (ty_c.get == TBool &&
-     ty_a.get == ty_b.get) then
- ty_a
+  if ty_c.get == TBool && ty_a.get == ty_b.get then
+  ty_a
                      else None else None
 }
 
