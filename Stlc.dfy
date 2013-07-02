@@ -7,16 +7,15 @@ datatype option<A> = None | Some(get: A);
 /// Syntax
 
 // Types
-datatype ty = TBool |                 // (base type for boolean)       
-              TArrow(T1: ty, T2: ty); // T1 => T2
-
+datatype ty =  TBool                  // (base type for boolean)
+            |  TArrow(T1: ty, T2: ty) // T1 => T2
+            ;
 // Terms
-datatype tm = tvar(id: int) |                  // x                  (variable)
-              tapp(f: tm, arg: tm) |           // t t                (application)
-              tabs(x: int, T: ty, body: tm) |  // \x.t               (abstraction)
-              ttrue | tfalse |                 // true, false        (boolean values)
-              tif(c: tm, a: tm, b: tm);        // if t then t else t (if expression)
-
+datatype tm = tvar(id: int)                      // x                  (variable)
+            | tapp(f: tm, arg: tm)               // t t                (application)
+            | tabs(x: int, T: ty, body: tm)      // \x.t               (abstraction)
+            | ttrue | tfalse                     // true, false        (boolean values)
+            | tif(c: tm, a: tm, b: tm)           // if t then t else t (if expression)
 
 /// Operational Semantics
 
