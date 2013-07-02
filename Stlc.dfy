@@ -76,14 +76,10 @@ ghost method lemma_step_example1(n: nat)
 
 // A context is a partial map from variable names to types.
 function find(c: map<int,ty>, x: int): option<ty>
-  ensures (x in c)   ==> find(c, x) == Some(c[x]);
-  ensures (x !in c) <==> find(c, x) == None;
 {
   if (x in c) then Some(c[x]) else None
 }
 function extend(x: int, T: ty, c: map<int,ty>): map<int,ty>
-  ensures extend(x, T, c)==c[x:=T];
-  ensures find(extend(x, T, c), x) == Some(T);
 {
   c[x:=T]
 }
@@ -151,7 +147,7 @@ ghost method nonexample_typing_3(S: ty, T: ty)
 // Type-Safety Properties
 
 // We're only interested in closed terms.
-function closed(t: tm): bool
+predicate closed(t: tm)
 {
   forall x :: x !in fv(t)
 }
