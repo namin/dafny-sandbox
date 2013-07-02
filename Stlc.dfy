@@ -102,30 +102,40 @@ function has_type(c: map<int,ty>, t: tm): option<ty>
   decreases t;
 {
   match t
-  /* Var */        case tvar(id) =>
+  /* Var */
+  case tvar(id) =>
   find(c, id)
-  /* Abs */        case tabs(x, T, body) =>
-                     var ty_body := has_type(extend(x, T, c), body);
+  /* Abs */
+  case tabs(x, T, body) =>
+  var ty_body := has_type(extend(x, T, c), body);
                      if (ty_body.Some?) then
   Some(TArrow(T, ty_body.get))
                      else None
-  /* App */        case tapp(f, arg) =>
-                     var ty_f := has_type(c, f);
-                     var ty_arg := has_type(c, arg);
-                     if (ty_f.Some? && ty_arg.Some? && ty_f.get.TArrow? && ty_f.get.T1 == ty_arg.get) then
+  /* App */
+  case tapp(f, arg) =>
+  var ty_f   := has_type(c, f);
+  var ty_arg := has_type(c, arg);
+                     if (ty_f.Some? && ty_arg.Some?) then
+  if  ty_f.get.TArrow? &&
+      ty_f.get.T1 == ty_arg.get then
  Some(ty_f.get.T2)
-                     else None
- /* True */        case ttrue =>
+                     else None else None
+ /* True */
+ case ttrue =>
  Some(TBool)
- /* False */       case tfalse =>
+ /* False */
+ case tfalse =>
  Some(TBool)
- /* If */          case tif(cond, a, b) =>
-                     var ty_c := has_type(c, cond);
-                     var ty_a := has_type(c, a);
-                     var ty_b := has_type(c, b);
-                     if (ty_c.Some? && ty_a.Some? && ty_b.Some? && ty_c.get == TBool && ty_a.get == ty_b.get) then
+ /* If */
+ case tif(cond, a, b) =>
+ var ty_c := has_type(c, cond);
+ var ty_a := has_type(c, a);
+ var ty_b := has_type(c, b);
+                     if (ty_c.Some? && ty_a.Some? && ty_b.Some?) then
+ if (ty_c.get == TBool &&
+     ty_a.get == ty_b.get) then
  ty_a
- else None
+                     else None else None
 }
 
 // Examples
