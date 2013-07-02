@@ -6,11 +6,18 @@
 // ... handy for partial functions
 datatype option<A> = None | Some(get: A);
 
+/// -----
+/// Model
+/// -----
+
 /// Syntax
 
 // Types
 datatype ty =  TBool                  // (base type for boolean)
             |  TArrow(T1: ty, T2: ty) // T1 => T2
+/*?
+            |  TNat                   // (base type for naturals)
+?*/
             ;
 
 // Terms
@@ -19,6 +26,10 @@ datatype tm = tvar(id: int)                      // x                  (variable
             | tabs(x: int, T: ty, body: tm)      // \x.t               (abstraction)
             | ttrue | tfalse                     // true, false        (boolean values)
             | tif(c: tm, a: tm, b: tm)           // if t then t else t (if expression)
+/*?
+            | tzero | tsucc(p: tm) | tprev(n: tm)//                    (naturals)
+            | teq(n1: tm, n2: tm)                //                    (equality on naturals)
+?*/
 
 /// Operational Semantics
 
@@ -26,7 +37,17 @@ datatype tm = tvar(id: int)                      // x                  (variable
 predicate value(t: tm)
 {
   t.tabs? || t.ttrue? || t.tfalse?
+/*?
+  || peano(t)
+?*/
 }
+
+/*?
+predicate peano(t: tm)
+{
+  t.tzero? || (t.tsucc? && peano(t.p))
+}
+?*/
 
 // Free Variables and Substitution
 
@@ -41,6 +62,12 @@ function fv(t: tm): set<int> //of free variables of t
   case tif(c, a, b) => fv(a)+fv(b)+fv(c)
   case ttrue => {}
   case tfalse => {}
+/*?
+  case tzero => {}
+  case tsucc(p) => fv(p)
+  case tprev(n) => fv(n)
+  case teq(n1, n2) => fv(n1)+fv(n2)
+?*/
 }
 
 function subst(x: int, s: tm, t: tm): tm //[x -> s]t
@@ -55,6 +82,12 @@ function subst(x: int, s: tm, t: tm): tm //[x -> s]t
   case ttrue => ttrue
   case tfalse => tfalse
   case tif(t1, t2, t3) => tif(subst(x, s, t1), subst(x, s, t2), subst(x, s, t3))
+/*?
+  case tzero => tzero
+  case tsucc(p) => tsucc(subst(x, s, p))
+  case tprev(n) => tprev(subst(x, s, n))
+  case teq(n1, n2) => teq(subst(x, s, n1), subst(x, s, n2))
+?*/
 }
 
 // Reduction
@@ -72,6 +105,29 @@ function step(t: tm): option<tm>
   Some(t.b)
   /* If */         else if (t.tif? && step(t.c).Some?) then
   Some(tif(step(t.c).get, t.a, t.b))
+/*?
+  /* Prev0 */
+                   else if (t.tprev? && t.n.tzero?) then
+  Some(tzero)
+  /* PrevSucc */   else if (t.tprev? && peano(t.n) && t.n.tsucc?) then
+  Some(t.n.p)
+  /* Prev */       else if (t.tprev? && step(t.n).Some?) then
+  Some(tprev(step(t.n).get))
+  /* Succ */       else if (t.tsucc? && step(t.p).Some?) then
+  Some(tsucc(step(t.p).get))
+  /* EqTrue0 */    else if (t.teq? && t.n1.tzero? && t.n2.tzero?) then
+  Some(ttrue)
+  /* EqFalse1 */   else if (t.teq? && t.n1.tsucc? && peano(t.n1) && t.n2.tzero?) then
+  Some(tfalse)
+  /* EqFalse2 */   else if (t.teq? && t.n1.tzero? && t.n2.tsucc? && peano(t.n2)) then
+  Some(tfalse)
+  /* EqRec */      else if (t.teq? && t.n1.tsucc? && t.n2.tsucc? && peano(t.n1) && peano(t.n2)) then
+  Some(teq(t.n1.p, t.n2.p))
+  /* Eq1 */        else if (t.teq? && step(t.n1).Some?) then
+  Some(teq(step(t.n1).get, t.n2))
+  /* Eq2 */        else if (t.teq? && peano(t.n1) && step(t.n2).Some?) then
+  Some(teq(t.n1, step(t.n2).get))
+?*/
   else None
 }
 
@@ -130,6 +186,25 @@ function has_type(c: map<int,ty>, t: tm): option<ty>
   if ty_c.get == TBool && ty_a.get == ty_b.get then
   ty_a
                      else None else None
+/*?
+  /* Zero */  case tzero => Some(TNat)
+  /* Prev */  case tprev(n) =>
+  var ty_n := has_type(c, n);
+                     if (ty_n.Some?) then
+  if ty_n.get == TNat then
+  Some(TNat)         else None else None
+  /* Succ */  case tsucc(p) =>
+  var ty_p := has_type(c, p);
+                     if (ty_p.Some?) then
+  if ty_p.get == TNat then
+  Some(TNat)         else None else None
+  /* Eq */    case teq(n1, n2) =>
+  var ty_n1 := has_type(c, n1);
+  var ty_n2 := has_type(c, n2);
+                      if (ty_n1.Some? && ty_n2.Some?) then
+  if ty_n1.get == TNat && ty_n2.get == TNat then
+  Some(TBool)         else None else None
+ ?*/
 }
 
 // Examples
@@ -165,8 +240,16 @@ ghost method nonexample_typing_3(S: ty, T: ty)
   assert has_type(c, tapp(tvar(0), tvar(0))) == None;
 }
 
+/*?
+ghost method example_typing_nat()
+  ensures has_type(map[], tabs(0, TNat, tprev(tvar(0)))) == Some(TArrow(TNat, TNat));
+{
+}
+?*/
 
+/// -----------------------
 /// Type-Safety Properties
+/// -----------------------
 
 // Progress:
 // A well-typed term is either a value or it can step.
