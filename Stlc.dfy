@@ -90,7 +90,7 @@ function fv(t: tm): set<int> //of free variables of t
   case tprev(n) => fv(n)
 /*BOOL?
   case teq(n1, n2) => fv(n1)+fv(n2)
-BOOL?*/
+?BOOL*/
 ?NAT*/
 /*REC?
   case tfold(T, t1) => fv(t1)
