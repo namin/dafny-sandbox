@@ -15,9 +15,9 @@ datatype option<A> = None | Some(get: A);
 // Types
 datatype ty =  TBase                             // (opaque base type)
             |  TArrow(T1: ty, T2: ty)            // T1 => T2
-//BOOL?
+/*BOOL?
             | TBool                              // (base type for booleans)
-//?BOOL
+?BOOL*/
 //?NAT
             |  TNat                              // (base type for naturals)
 //NAT?
@@ -30,13 +30,15 @@ datatype ty =  TBase                             // (opaque base type)
 datatype tm = tvar(id: int)                      // x                  (variable)
             | tapp(f: tm, arg: tm)               // t t                (application)
             | tabs(x: int, T: ty, body: tm)      // \x.t               (abstraction)
-//BOOL?
+/*BOOL?
             | ttrue | tfalse                     // true, false        (boolean values)
             | tif(c: tm, a: tm, b: tm)           // if t then t else t (if expression)
-//?BOOL
+?BOOL*/
 //?NAT
             | tzero | tsucc(p: tm) | tprev(n: tm)//                    (naturals)
+/*BOOL?
             | teq(n1: tm, n2: tm)                //                    (equality on naturals)
+?BOOL*/
 //NAT?
 //?REC
             | tfold(Tf: ty, tf: tm) | tunfold(tu: tm)//                (iso-recursive terms)
@@ -48,10 +50,10 @@ datatype tm = tvar(id: int)                      // x                  (variable
 // Values
 predicate value(t: tm)
 {
-  t.tabs? ||
-//?BOOL
-t.ttrue? || t.tfalse?
-//BOOL?
+  t.tabs?
+/*BOOL?
+  || t.ttrue? || t.tfalse?
+?BOOL*/
 //?NAT
   || peano(t)
 //NAT?
@@ -77,16 +79,18 @@ function fv(t: tm): set<int> //of free variables of t
   case tabs(x, T, body) => fv(body)-{x}//x is bound
   // congruent cases...
   case tapp(f, arg) => fv(f)+fv(arg)
-//?BOOL
+/*BOOL?
   case tif(c, a, b) => fv(a)+fv(b)+fv(c)
   case ttrue => {}
   case tfalse => {}
-//BOOL?
+?BOOL*/
 //?NAT
   case tzero => {}
   case tsucc(p) => fv(p)
   case tprev(n) => fv(n)
+/*BOOL?
   case teq(n1, n2) => fv(n1)+fv(n2)
+BOOL?*/
 //NAT?
 //?REC
   case tfold(T, t1) => fv(t1)
@@ -103,16 +107,18 @@ function subst(x: int, s: tm, t: tm): tm //[x -> s]t
   case tabs(x', T, t1) => tabs(x', T, if x==x' then t1 else subst(x, s, t1))
   // congruent cases...
   case tapp(t1, t2) => tapp(subst(x, s, t1), subst(x, s, t2))
-//?BOOL
+/*BOOL?
   case ttrue => ttrue
   case tfalse => tfalse
   case tif(t1, t2, t3) => tif(subst(x, s, t1), subst(x, s, t2), subst(x, s, t3))
-//BOOL?
+?BOOL*/
 //?NAT
   case tzero => tzero
   case tsucc(p) => tsucc(subst(x, s, p))
   case tprev(n) => tprev(subst(x, s, n))
+/*BOOL?
   case teq(n1, n2) => teq(subst(x, s, n1), subst(x, s, n2))
+?BOOL*/
 //NAT?
 //?REC
   case tfold(T, t1) => tfold(T, subst(x, s, t1))
@@ -128,9 +134,9 @@ function ty_fv(T: ty): set<int> //of free type variables of T
   case TRec(X, T1) => ty_fv(T1)-{X}
   case TArrow(T1, T2) => ty_fv(T1)+ty_fv(T2)
   case TBase => {}
-//?BOOL
+/*BOOL?
   case TBool => {}
-//BOOL?
+?BOOL*/
 //?NAT
   case TNat => {}
 //NAT?
@@ -143,9 +149,9 @@ function tsubst(X: int, S: ty, T: ty): ty
   case TRec(X', T1) => TRec(X', if X==X' then T1 else tsubst(X, S, T1))
   case TArrow(T1, T2) => TArrow(tsubst(X, S, T1), tsubst(X, S, T2))
   case TBase => TBase
-//?BOOL
+/*BOOL?
   case TBool => TBool
-//BOOL?
+?BOOL*/
 //?NAT
   case TNat => TNat
 //NAT?
@@ -166,14 +172,14 @@ function step(t: tm): option<tm>
   Some(tapp(step(t.f).get, t.arg))
   /* App2 */       else if (t.tapp? && value(t.f) && step(t.arg).Some?) then
   Some(tapp(t.f, step(t.arg).get))
-//?BOOL
+/*BOOL?
   /* IfTrue */     else if (t.tif? && t.c == ttrue) then
   Some(t.a)
   /* IfFalse */    else if (t.tif? && t.c == tfalse) then
   Some(t.b)
   /* If */         else if (t.tif? && step(t.c).Some?) then
   Some(tif(step(t.c).get, t.a, t.b))
-//BOOL?
+?BOOL*/
 //?NAT
   /* Prev0 */
                    else if (t.tprev? && t.n.tzero?) then
@@ -184,6 +190,7 @@ function step(t: tm): option<tm>
   Some(tprev(step(t.n).get))
   /* Succ */       else if (t.tsucc? && step(t.p).Some?) then
   Some(tsucc(step(t.p).get))
+/*BOOL?
   /* EqTrue0 */    else if (t.teq? && t.n1.tzero? && t.n2.tzero?) then
   Some(ttrue)
   /* EqFalse1 */   else if (t.teq? && t.n1.tsucc? && peano(t.n1) && t.n2.tzero?) then
@@ -196,6 +203,7 @@ function step(t: tm): option<tm>
   Some(teq(step(t.n1).get, t.n2))
   /* Eq2 */        else if (t.teq? && peano(t.n1) && step(t.n2).Some?) then
   Some(teq(t.n1, step(t.n2).get))
+?BOOL*/
 //NAT?
 //?REC
   /* UnfoldFold */ else if (t.tunfold? && t.tu.tfold? && value(t.tu.tf)) then Some(t.tu.tf)
@@ -250,7 +258,7 @@ function has_type(c: map<int,ty>, t: tm): option<ty>
                      if (ty_f.Some? && ty_arg.Some?) then
   if ty_f.get.TArrow? && ty_f.get.T1 == ty_arg.get then
   Some(ty_f.get.T2)  else None else None
-//?BOOL
+/*BOOL?
   /* True */  case ttrue => Some(TBool)
   /* False */ case tfalse => Some(TBool)
   /* If */    case tif(cond, a, b) =>
@@ -261,7 +269,7 @@ function has_type(c: map<int,ty>, t: tm): option<ty>
   if ty_c.get == TBool && ty_a.get == ty_b.get then
   ty_a
                      else None else None
-//BOOL?
+?BOOL*/
 //?NAT
   /* Zero */  case tzero => Some(TNat)
   /* Prev */  case tprev(n) =>
@@ -274,12 +282,14 @@ function has_type(c: map<int,ty>, t: tm): option<ty>
                      if (ty_p.Some?) then
   if ty_p.get == TNat then
   Some(TNat)         else None else None
+/*BOOL?
   /* Eq */    case teq(n1, n2) =>
   var ty_n1 := has_type(c, n1);
   var ty_n2 := has_type(c, n2);
                       if (ty_n1.Some? && ty_n2.Some?) then
   if ty_n1.get == TNat && ty_n2.get == TNat then
   Some(TBool)         else None else None
+?BOOL*/
 //NAT?
 //?REC
   /* Fold */  case tfold(U, t1) =>
@@ -329,7 +339,7 @@ ghost method nonexample_typing_3(S: ty, T: ty)
   assert has_type(c, tapp(tvar(0), tvar(0))) == None;
 }
 
-//?BOOL
+/*BOOL?
 ghost method example_typing_bool()
   ensures has_type(map[], tabs(0, TBase, tabs(1, TBase, tabs(2, TBool, tif(tvar(2), tvar(0), tvar(1)))))) ==
           Some(TArrow(TBase, TArrow(TBase, TArrow(TBool, TBase))));
@@ -344,7 +354,7 @@ ghost method example_typing_bool()
   assert has_type(c1, tabs(2, TBool, tif(tvar(2), tvar(0), tvar(1)))) == Some(TArrow(TBool, TBase));
   assert has_type(c0, tabs(1, TBase, tabs(2, TBool, tif(tvar(2), tvar(0), tvar(1))))) == Some(TArrow(TBase, TArrow(TBool, TBase)));
 }
-//BOOL?
+?BOOL*/
 
 //?NAT
 ghost method example_typing_nat()
@@ -359,23 +369,23 @@ ghost method example_typing_nat()
 // TODO
 ghost method example_typing_rec()
   // ∅ |- foldµT. T→α(λx : µT. T → α. (unfold x) x) : µT. T → α
-  ensures has_type(map[], tfold(TRec(0, TArrow(TVar(0), TBool)), tabs(0, TRec(0, TArrow(TVar(0), TBool)), tapp(tunfold(tvar(0)), tvar(0))))) ==
-          Some(TRec(0, TArrow(TVar(0), TBool)));
+  ensures has_type(map[], tfold(TRec(0, TArrow(TVar(0), TBase)), tabs(0, TRec(0, TArrow(TVar(0), TBase)), tapp(tunfold(tvar(0)), tvar(0))))) ==
+          Some(TRec(0, TArrow(TVar(0), TBase)));
 {
-  var R := TRec(0, TArrow(TVar(0), TBool));
+  var R := TRec(0, TArrow(TVar(0), TBase));
   var c := extend(0, R, map[]);
   //{x : µT. T → α}  x : µT. T → α
   assert has_type(c, tvar(0)) == Some(R);
   //{x : µT. T → α}  (unfold x):(µT. T → α) → α {x : µT. T → α}  x : µT. T → α
-  assert tsubst(R.X, R, R.T) == TArrow(R, TBool);
-  assert has_type(c, tunfold(tvar(0))) == Some(TArrow(R, TBool));
+  assert tsubst(R.X, R, R.T) == TArrow(R, TBase);
+  assert has_type(c, tunfold(tvar(0))) == Some(TArrow(R, TBase));
   //{x : µT. T → α}  ( (unfold x) x)) : α
-  assert has_type(c, tapp(tunfold(tvar(0)), tvar(0))) == Some(TBool);
+  assert has_type(c, tapp(tunfold(tvar(0)), tvar(0))) == Some(TBase);
   //∅  (λx : µT. T → α. (unfold x) x)) :(µT. T → α) → α
-  assert has_type(map[], tabs(0, R, tapp(tunfold(tvar(0)), tvar(0)))) == Some(TArrow(R, TBool));
-  assert ty_fv(R)==ty_fv(TArrow(TVar(0),TBool))-{0}=={};
+  assert has_type(map[], tabs(0, R, tapp(tunfold(tvar(0)), tvar(0)))) == Some(TArrow(R, TBase));
+  assert ty_fv(R)==ty_fv(TArrow(TVar(0),TBase))-{0}=={};
   assert ty_closed(R);
-  assert has_type(map[], tfold(TRec(0, TArrow(TVar(0), TBool)), tabs(0, TRec(0, TArrow(TVar(0), TBool)), tapp(tunfold(tvar(0)), tvar(0))))).Some?;
+  assert has_type(map[], tfold(TRec(0, TArrow(TVar(0), TBase)), tabs(0, TRec(0, TArrow(TVar(0), TBase)), tapp(tunfold(tvar(0)), tvar(0))))).Some?;
 }
 //REC?
 
