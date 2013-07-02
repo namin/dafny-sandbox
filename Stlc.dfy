@@ -281,7 +281,7 @@ predicate closed(t: tm)
 }
 
 // If a term can be well-typed in an empty context,
-// then is is closed.
+// then it is closed.
 ghost method corollary_typable_empty__closed(t: tm)
   requires has_type(map[], t).Some?;
   ensures closed(t);
