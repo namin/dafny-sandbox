@@ -18,12 +18,12 @@ datatype ty =  TBase                             // (opaque base type)
 /*BOOL?
             | TBool                              // (base type for booleans)
 ?BOOL*/
-//?NAT
+/*NAT?
             |  TNat                              // (base type for naturals)
-//NAT?
-//?REC
+?NAT*/
+/*REC?
             | TVar(id: int) | TRec(X: nat, T: ty)// (iso-recursive types)
-//REC?
+?REC*/
             ;
 
 // Terms
@@ -34,15 +34,15 @@ datatype tm = tvar(id: int)                      // x                  (variable
             | ttrue | tfalse                     // true, false        (boolean values)
             | tif(c: tm, a: tm, b: tm)           // if t then t else t (if expression)
 ?BOOL*/
-//?NAT
+/*NAT?
             | tzero | tsucc(p: tm) | tprev(n: tm)//                    (naturals)
 /*BOOL?
             | teq(n1: tm, n2: tm)                //                    (equality on naturals)
 ?BOOL*/
-//NAT?
-//?REC
+?NAT*/
+/*REC?
             | tfold(Tf: ty, tf: tm) | tunfold(tu: tm)//                (iso-recursive terms)
-//REC?
+?REC*/
             ;
 
 /// Operational Semantics
@@ -54,20 +54,20 @@ predicate value(t: tm)
 /*BOOL?
   || t.ttrue? || t.tfalse?
 ?BOOL*/
-//?NAT
+/*NAT?
   || peano(t)
-//NAT?
-//?REC
+?NAT*/
+/*REC?
   || (t.tfold? && value(t.tf))
-//REC?
+?REC*/
 }
 
-//?NAT
+/*NAT?
 predicate peano(t: tm)
 {
   t.tzero? || (t.tsucc? && peano(t.p))
 }
-//NAT?
+?NAT*/
 
 // Free Variables and Substitution
 
@@ -84,18 +84,18 @@ function fv(t: tm): set<int> //of free variables of t
   case ttrue => {}
   case tfalse => {}
 ?BOOL*/
-//?NAT
+/*NAT?
   case tzero => {}
   case tsucc(p) => fv(p)
   case tprev(n) => fv(n)
 /*BOOL?
   case teq(n1, n2) => fv(n1)+fv(n2)
 BOOL?*/
-//NAT?
-//?REC
+?NAT*/
+/*REC?
   case tfold(T, t1) => fv(t1)
   case tunfold(t1) => fv(t1)
-//REC?
+?REC*/
 }
 
 function subst(x: int, s: tm, t: tm): tm //[x -> s]t
@@ -112,21 +112,21 @@ function subst(x: int, s: tm, t: tm): tm //[x -> s]t
   case tfalse => tfalse
   case tif(t1, t2, t3) => tif(subst(x, s, t1), subst(x, s, t2), subst(x, s, t3))
 ?BOOL*/
-//?NAT
+/*NAT?
   case tzero => tzero
   case tsucc(p) => tsucc(subst(x, s, p))
   case tprev(n) => tprev(subst(x, s, n))
 /*BOOL?
   case teq(n1, n2) => teq(subst(x, s, n1), subst(x, s, n2))
 ?BOOL*/
-//NAT?
-//?REC
+?NAT*/
+/*REC?
   case tfold(T, t1) => tfold(T, subst(x, s, t1))
   case tunfold(t1) => tunfold(subst(x, s, t1))
-//REC?
+?REC*/
 }
 
-//?REC
+/*REC?
 function ty_fv(T: ty): set<int> //of free type variables of T
 {
   match T
@@ -137,9 +137,9 @@ function ty_fv(T: ty): set<int> //of free type variables of T
 /*BOOL?
   case TBool => {}
 ?BOOL*/
-//?NAT
+/*NAT?
   case TNat => {}
-//NAT?
+?NAT*/
 }
 
 function tsubst(X: int, S: ty, T: ty): ty
@@ -152,16 +152,16 @@ function tsubst(X: int, S: ty, T: ty): ty
 /*BOOL?
   case TBool => TBool
 ?BOOL*/
-//?NAT
+/*NAT?
   case TNat => TNat
-//NAT?
+?NAT*/
 }
 
 predicate ty_closed(T: ty)
 {
   forall x :: x !in ty_fv(T)
 }
-//REC?
+?REC*/
 
 // Reduction
 function step(t: tm): option<tm>
@@ -180,7 +180,7 @@ function step(t: tm): option<tm>
   /* If */         else if (t.tif? && step(t.c).Some?) then
   Some(tif(step(t.c).get, t.a, t.b))
 ?BOOL*/
-//?NAT
+/*NAT?
   /* Prev0 */
                    else if (t.tprev? && t.n.tzero?) then
   Some(tzero)
@@ -204,12 +204,12 @@ function step(t: tm): option<tm>
   /* Eq2 */        else if (t.teq? && peano(t.n1) && step(t.n2).Some?) then
   Some(teq(t.n1, step(t.n2).get))
 ?BOOL*/
-//NAT?
-//?REC
+?NAT*/
+/*REC?
   /* UnfoldFold */ else if (t.tunfold? && t.tu.tfold? && value(t.tu.tf)) then Some(t.tu.tf)
   /* Fold */       else if (t.tfold? && step(t.tf).Some?) then Some(tfold(t.Tf, step(t.tf).get))
   /* Unfold */     else if (t.tunfold? && step(t.tu).Some?) then Some(tunfold(step(t.tu).get))
-//REC?
+?REC*/
   else None
 }
 
@@ -270,7 +270,7 @@ function has_type(c: map<int,ty>, t: tm): option<ty>
   ty_a
                      else None else None
 ?BOOL*/
-//?NAT
+/*NAT?
   /* Zero */  case tzero => Some(TNat)
   /* Prev */  case tprev(n) =>
   var ty_n := has_type(c, n);
@@ -290,8 +290,8 @@ function has_type(c: map<int,ty>, t: tm): option<ty>
   if ty_n1.get == TNat && ty_n2.get == TNat then
   Some(TBool)         else None else None
 ?BOOL*/
-//NAT?
-//?REC
+?NAT*/
+/*REC?
   /* Fold */  case tfold(U, t1) =>
   var ty_t1 := if (ty_closed(U)) then has_type(c, t1) else None;
                       if (ty_t1.Some?) then
@@ -303,7 +303,7 @@ function has_type(c: map<int,ty>, t: tm): option<ty>
   var U := ty_t1.get;
   if U.TRec? then
   Some(tsubst(U.X, U, U.T)) else None else None
-//REC?
+?REC*/
 }
 
 // Examples
@@ -356,16 +356,16 @@ ghost method example_typing_bool()
 }
 ?BOOL*/
 
-//?NAT
+/*NAT?
 ghost method example_typing_nat()
   ensures has_type(map[], tabs(0, TNat, tprev(tvar(0)))) == Some(TArrow(TNat, TNat));
 {
   var c := extend(0, TNat, map[]);
   assert has_type(c, tprev(tvar(0)))==Some(TNat);
 }
-//NAT?
+?NAT*/
 
-//?REC
+/*REC?
 // TODO
 ghost method example_typing_rec()
   // ∅ |- foldµT. T→α(λx : µT. T → α. (unfold x) x) : µT. T → α
@@ -387,7 +387,7 @@ ghost method example_typing_rec()
   assert ty_closed(R);
   assert has_type(map[], tfold(TRec(0, TArrow(TVar(0), TBase)), tabs(0, TRec(0, TArrow(TVar(0), TBase)), tapp(tunfold(tvar(0)), tvar(0))))).Some?;
 }
-//REC?
+?REC*/
 
 /// -----------------------
 /// Type-Safety Properties
