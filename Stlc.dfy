@@ -224,6 +224,7 @@ predicate reduces_to(t: tm, t': tm, n: nat)
 // Examples
 ghost method lemma_step_example1(n: nat)
   requires n > 0;
+  // (\x:B=>B.x) (\x:B.x) reduces to (\x:B.x)
   ensures reduces_to(tapp(tabs(0, TArrow(TBase, TBase), tvar(0)), tabs(0, TBase, tvar(0))),
                      tabs(0, TBase, tvar(0)), n);
 {
