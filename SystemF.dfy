@@ -253,6 +253,30 @@ ghost method lemma_seq_assoc<T>(s1: seq<T>, s2: seq<T>, s3: seq<T>)
 {
 }
 
+ghost method lemma_ty_eq_rec_fv(T1: ty, T2: ty, s1: seq<int>, s2: seq<int>, L: set<int>, x: int)
+  requires ty_eq_rec(T1, T2, s1, s2, L);
+  requires x in ty_fv(T1);
+  ensures x in s1 || x in L;
+{
+ match T1 {
+  case TVar(id1) =>
+  case TForall(x1, body1) =>
+    assert ty_eq_rec(body1, T2.body, [x1]+s1, [T2.x]+s2, L);
+    if (x1==x) {
+      assert x !in ty_fv(T1);
+    } else {
+      lemma_ty_eq_rec_fv(body1, T2.body, [x1]+s1, [T2.x]+s2, L, x);
+    }
+  case TArrow(T11, T12) =>
+    if (x in ty_fv(T11)) {
+      lemma_ty_eq_rec_fv(T11, T2.T1, s1, s2, L, x);
+    } else if (x in ty_fv(T12)) {
+      lemma_ty_eq_rec_fv(T12, T2.T2, s1, s2, L, x);
+    } else {}
+  case TBase =>
+ }  
+}
+
 ghost method lemma_ty_eq_rec_switch_L(T1: ty, T2: ty, s1: seq<int>, s2: seq<int>, L: set<int>, x: int)
   requires find_index(x, s1, 0).None? && find_index(x, s2, 0).None?;
   requires ty_eq_rec(T1, T2, s1, s2, L+{x});
