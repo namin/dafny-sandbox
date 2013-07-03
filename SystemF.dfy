@@ -21,7 +21,7 @@ datatype ty =  TBase                             // (opaque base type)
 // Terms
 datatype tm = tvar(id: int)                      // x                  (variable)
             | tapp(f: tm, arg: tm)               // t t                (application)
-            | tabs(x: int, T: ty, body: tm)      // \x:T.t               (abstraction)
+            | tabs(x: int, T: ty, body: tm)      // \x:T.t             (abstraction)
             | tyapp(tf: tm, targ: ty)
             | tyabs(tx: int, tbody: tm)
             ;
@@ -248,6 +248,11 @@ ghost method lemma_ty_eq_rec_monotonic_L(T1: ty, T2: ty, s1: seq<int>, s2: seq<i
 {
 }
 
+ghost method lemma_seq_assoc<T>(s1: seq<T>, s2: seq<T>, s3: seq<T>)
+  ensures s1+s2+s3==s1+(s2+s3);
+{
+}
+
 ghost method lemma_ty_eq_rec_switch_L(T1: ty, T2: ty, s1: seq<int>, s2: seq<int>, L: set<int>, x: int)
   requires find_index(x, s1, 0).None? && find_index(x, s2, 0).None?;
   requires ty_eq_rec(T1, T2, s1, s2, L+{x});
@@ -269,8 +274,22 @@ ghost method lemma_ty_eq_rec_switch_L(T1: ty, T2: ty, s1: seq<int>, s2: seq<int>
     }
   case TForall(x1, body1) =>
     assert ty_eq_rec(body1, T2.body, [x1]+s1, [T2.x]+s2, L+{x});
-    // TODO
-    assume ty_eq_rec(T1, T2, [x]+s1, [x]+s2, L);
+    if (x!=x1 && x!=T2.x) {
+      lemma_ty_eq_rec_switch_L(body1, T2.body, [x1]+s1, [T2.x]+s2, L, x);
+      lemma_seq_assoc([x], [x1], s1);
+      assert [x]+[x1]+s1==[x]+([x1]+s1);
+      lemma_seq_assoc([x], [T2.x], s2);
+      assert [x]+[T2.x]+s2==[x]+([T2.x]+s2);
+      assert ty_eq_rec(body1, T2.body, [x]+[x1]+s1, [x]+[T2.x]+s2, L);
+      assume ty_eq_rec(body1, T2.body, [x1]+[x]+s1, [T2.x]+[x]+s2, L);
+      lemma_seq_assoc([x1], [x], s1);
+      assert [x1]+[x]+s1==[x1]+([x]+s1);
+      lemma_seq_assoc([T2.x], [x], s2);
+      assert [T2.x]+[x]+s2==[T2.x]+([x]+s2);
+    } else {
+      // TODO
+      assume ty_eq_rec(T1, T2, [x]+s1, [x]+s2, L);
+    }
   case TArrow(T11, T12) =>
   case TBase =>
  }
