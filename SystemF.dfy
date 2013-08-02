@@ -249,26 +249,13 @@ function ty_tm_subst(X: int, S: ty, t: tm): tm //[X -> S]t
   case tyapp(tf, targ) => tyapp(ty_tm_subst(X, S, tf), ty_ty_subst(X, S, targ))
 }
 
-ghost method lemma_ty_ty_subst_eq1(X: int, S: ty, T1: ty, T2: ty)
-  requires ty_eq(T1, T2);
-  ensures ty_eq(ty_ty_subst(X, S, T1), ty_ty_subst(X, S, T2));
-{
-  assume ty_eq(ty_ty_subst(X, S, T1), ty_ty_subst(X, S, T2));
-}
-ghost method lemma_ty_ty_subst_eq2(X: int, S1: ty, S2: ty, T: ty)
-  requires ty_eq(S1, S2);
-  ensures ty_eq(ty_ty_subst(X, S1, T), ty_ty_subst(X, S2, T));
-{
-  assume ty_eq(ty_ty_subst(X, S1, T), ty_ty_subst(X, S2, T));
-}
-ghost method lemma_ty_ty_subst_eq3(S: ty, T1: ty, T2: ty)
+ghost method lemma_ty_ty_subst_forall(S: ty, T1: ty, T2: ty)
   requires T1.TForall? && T2.TForall?;
   requires ty_eq(T1, T2);
   ensures ty_eq(ty_ty_subst(T1.x, S, T1.body), ty_ty_subst(T2.x, S, T2.body));
 {
   assume ty_eq(ty_ty_subst(T1.x, S, T1.body), ty_ty_subst(T2.x, S, T2.body));
 }
-
 
 // Reduction
 function step(t: tm): option<tm>
@@ -421,8 +408,6 @@ ghost method {:timeLimit 20} boilerplate_lemmas()
   ensures forall T1 :: ty_eq(T1, T1);
   ensures forall T1, T2, T3 :: ty_eq(T1, T2) && ty_eq(T2, T3) ==> ty_eq(T1, T3);
   ensures forall T1, T2 :: ty_eq(T1, T2) ==> ty_eq(T2, T1);
-  ensures forall X, S, T1, T2 :: ty_eq(T1, T2) ==> ty_eq(ty_ty_subst(X, S, T1), ty_ty_subst(X, S, T2));
-  ensures forall X, S1, S2, T :: ty_eq(S1, S2) ==> ty_eq(ty_ty_subst(X, S1, T), ty_ty_subst(X, S2, T));
   ensures forall S, T1:ty, T2: ty :: (T1.TForall? && T2.TForall? && ty_eq(T1, T2)) ==> ty_eq(ty_ty_subst(T1.x, S, T1.body), ty_ty_subst(T2.x, S, T2.body));
 {
   forall (T1)
@@ -440,20 +425,10 @@ ghost method {:timeLimit 20} boilerplate_lemmas()
   {
     sym_ty_eq(T1, T2);
   }
-  forall (X, S, T1, T2 | ty_eq(T1, T2))
-  ensures ty_eq(ty_ty_subst(X, S, T1), ty_ty_subst(X, S, T2));
-  {
-    lemma_ty_ty_subst_eq1(X, S, T1, T2);
-  }
-  forall (X, S1, S2, T | ty_eq(S1, S2))
-  ensures ty_eq(ty_ty_subst(X, S1, T), ty_ty_subst(X, S2, T));
-  {
-    lemma_ty_ty_subst_eq2(X, S1, S2, T);
-  }
   forall (S, T1:ty, T2:ty | T1.TForall? && T2.TForall? && ty_eq(T1, T2))
   ensures ty_eq(ty_ty_subst(T1.x, S, T1.body), ty_ty_subst(T2.x, S, T2.body));
   {
-    lemma_ty_ty_subst_eq3(S, T1, T2);
+    lemma_ty_ty_subst_forall(S, T1, T2);
   }
 }
 // If a term t is well-typed in context c,
@@ -496,25 +471,30 @@ ghost method lemma_context_invariance(c: map<int,ty>, c': map<int,ty>, t: tm, L:
   else {}
 }
 
-/*
-// TODO
-// finish it up
-/*
+ghost method lemma_L_invariance(c: map<int,ty>, t: tm, L: set<int>, L': set<int>)
+  requires has_type(c, t, L).Some?;
+  ensures has_type(c, t, L+L').Some?;
+  ensures has_type(c, t, L).get==has_type(c, t, L+L').get;
+{
+  assume has_type(c, t, L+L').Some?;
+  assume has_type(c, t, L).get==has_type(c, t, L+L').get;
+}
+
 // Substitution preserves typing:
 // If  s has type S in an empty context,
 // and t has type T in a context extended with x having type S,
 // then [x -> s]t has type T as well.
-ghost method lemma_substitution_preserves_typing(c: map<int,ty>, x: int, s: tm, t: tm, L: set<int>)
+ghost method lemma_substitution_preserves_typing(c: map<int,ty>, x: int, s: tm, S: ty, t: tm, L: set<int>)
   requires has_type(map[], s, L).Some?;
-  requires has_type(extend(x, has_type(map[], s, L).get, c), t, L).Some?;
+  requires ty_eq(has_type(map[], s, L).get, S);
+  requires has_type(extend(x, S, c), t, L).Some?;
   ensures has_type(c, subst(x, s, t), L).Some?;
-  ensures ty_eq(has_type(c, subst(x, s, t), L).get, has_type(extend(x, has_type(map[], s, L).get, c), t, L).get, {});
+  ensures ty_eq(has_type(c, subst(x, s, t), L).get, has_type(extend(x, S, c), t, L).get);
   decreases t;
 {
-  var S := has_type(map[], s, L).get;
+  boilerplate_lemmas();
   var cs := extend(x, S, c);
   var T  := has_type(cs, t, L).get;
-
   if (t.tvar?) {
     if (t.id==x) {
       assert T == S;
@@ -523,17 +503,40 @@ ghost method lemma_substitution_preserves_typing(c: map<int,ty>, x: int, s: tm, 
     }
   } else if (t.tabs?) {
     if (t.x==x) {
+      assert x !in fv(t);
+      forall (x | x in fv(t))
+      ensures find(c, x).Some? && find(cs, x).Some? && ty_eq(find(c, x).get, find(cs, x).get);
+      {
+        lemma_free_in_context(cs, x, t, L);
+      }
       lemma_context_invariance(cs, c, t, L);
     } else {
       var cx  := extend(t.x, t.T, c);
       var csx := extend(x, S, cx);
       var cxs := extend(t.x, t.T, cs);
+      forall (x | x in fv(t.body))
+      ensures find(csx, x).Some? && find(cxs, x).Some? && ty_eq(find(csx, x).get, find(cxs, x).get);
+      {
+        lemma_free_in_context(cxs, x, t.body, L);
+      }
+
       lemma_context_invariance(cxs, csx, t.body, L);
-      lemma_substitution_preserves_typing(cx, x, s, t.body, L);
+      lemma_substitution_preserves_typing(cx, x, s, S, t.body, L);
+      assert ty_eq(has_type(cx, subst(x, s, t.body), L).get, has_type(extend(x, S, cx), t.body, L).get);
     }
+  } else if (t.tapp?) {
+    lemma_substitution_preserves_typing(c, x, s, S, t.f, L);
+    lemma_substitution_preserves_typing(c, x, s, S, t.arg, L);
+    assert   ty_eq(has_type(c, subst(x, s, t.f), L).get, has_type(extend(x, S, c), t.f, L).get);
+    assert   ty_eq(has_type(c, subst(x, s, t.arg), L).get, has_type(extend(x, S, c), t.arg, L).get);
+  } else if (t.tyabs?) {
+    lemma_L_invariance(map[], s, L, {t.tx});
+    lemma_substitution_preserves_typing(c, x, s, S, t.tbody, L+{t.tx});
+  } else if (t.tyapp?) {
+    lemma_substitution_preserves_typing(c, x, s, S, t.tf, L);
+    assert   ty_eq(has_type(c, subst(x, s, t.tf), L).get, has_type(extend(x, S, c), t.tf, L).get);
   }
 }
-
 
 // Preservation:
 // A well-type term which steps preserves its type.
@@ -541,12 +544,21 @@ ghost method theorem_preservation(t: tm, L: set<int>)
   requires has_type(map[], t, L).Some?;
   requires step(t).Some?;
   ensures has_type(map[], step(t).get, L).Some?;
-  ensures ty_eq(has_type(map[], step(t).get, L).get, has_type(map[], t, L).get, L);
+  ensures ty_eq(has_type(map[], step(t).get, L).get, has_type(map[], t, L).get);
 {
+  boilerplate_lemmas();
   if (t.tapp? && value(t.f) && value(t.arg)) {
-    lemma_substitution_preserves_typing(map[], t.f.x, t.arg, t.f.body, L);
+    lemma_substitution_preserves_typing(map[], t.f.x, t.arg, t.f.T, t.f.body, L);
   }
-  /* TyAppTyAbs */ else if (t.tyapp? && t.tf.tyabs?) {}
+  /* App1 */       else if (t.tapp? && step(t.f).Some?) {
+    theorem_preservation(t.f, L);
+  }
+  /* App2 */       else if (t.tapp? && value(t.f) && step(t.arg).Some?) {}
+  /* TyAppTyAbs */ else if (t.tyapp? && t.tf.tyabs?) {
+    // TODO
+    assume has_type(map[], step(t).get, L).Some?;
+    assume ty_eq(has_type(map[], step(t).get, L).get, has_type(map[], t, L).get);
+  }
   /* TyApp */      else if (t.tyapp? && step(t.tf).Some?) {}
   else {}
 }
@@ -567,11 +579,12 @@ predicate stuck(t: tm)
 // A well-typed term cannot be stuck.
 ghost method corollary_soundness(t: tm, t': tm, T: ty, n: nat)
   requires has_type(map[], t, {}).Some?;
-  requires ty_eq(has_type(map[], t, {}).get, T, {});
+  requires ty_eq(has_type(map[], t, {}).get, T);
   requires reduces_to(t, t', n);
   ensures !stuck(t');
   decreases n;
 {
+  boilerplate_lemmas();
   theorem_progress(t);
   if (t != t') {
    theorem_preservation(t, {});
@@ -579,6 +592,4 @@ ghost method corollary_soundness(t: tm, t': tm, T: ty, n: nat)
    corollary_soundness(step(t).get, t', T', n-1);
   }
 }
-*/
 /// QED
-*/
