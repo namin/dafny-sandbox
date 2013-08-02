@@ -330,10 +330,11 @@ function has_type(c: map<int,ty>, t: tm, L: set<int>): option<ty>
   if ty_f.get.TArrow? && ty_eq(ty_f.get.T1, ty_arg.get) then
   Some(ty_f.get.T2)  else None else None
   /* TyApp */ case tyapp(f, ty_arg) =>
+  if wf(ty_arg, L) then
   var ty_f    := has_type(c, f, L);
                       if (ty_f.Some?) then
   if (ty_f.get.TForall?) then
-  Some(ty_ty_subst(ty_f.get.x, ty_arg, ty_f.get.body)) else None else None
+  Some(ty_ty_subst(ty_f.get.x, ty_arg, ty_f.get.body)) else None else None else None
   /* TyAbs */ case tyabs(x, body) =>
   var ty_body  := has_type(c, body, L+{x});
                       if (ty_body.Some?) then
@@ -538,6 +539,17 @@ ghost method lemma_substitution_preserves_typing(c: map<int,ty>, x: int, s: tm, 
   }
 }
 
+ghost method lemma_ty_tm_subst_preserves_typing(S: ty, f: tm, F: ty, L: set<int>)
+  requires f.tyabs? && F.TForall?;
+  requires wf(S, L);
+  requires has_type(map[], f, L) == Some(F);
+  ensures has_type(map[], ty_tm_subst(f.tx, S, f.tbody), L).Some?;
+  ensures ty_eq(has_type(map[], ty_tm_subst(f.tx, S, f.tbody), L).get, ty_ty_subst(F.x, S, F.body));
+{
+  assume has_type(map[], ty_tm_subst(f.tx, S, f.tbody), L).Some?;
+  assume ty_eq(has_type(map[], ty_tm_subst(f.tx, S, f.tbody), L).get, ty_ty_subst(F.x, S, F.body));
+}
+
 // Preservation:
 // A well-type term which steps preserves its type.
 ghost method theorem_preservation(t: tm, L: set<int>)
@@ -555,9 +567,10 @@ ghost method theorem_preservation(t: tm, L: set<int>)
   }
   /* App2 */       else if (t.tapp? && value(t.f) && step(t.arg).Some?) {}
   /* TyAppTyAbs */ else if (t.tyapp? && t.tf.tyabs?) {
-    // TODO
-    assume has_type(map[], step(t).get, L).Some?;
-    assume ty_eq(has_type(map[], step(t).get, L).get, has_type(map[], t, L).get);
+    var ty_f    := has_type(map[], t.tf, L).get;
+    lemma_ty_tm_subst_preserves_typing(t.targ, t.tf, ty_f, L);
+    assert has_type(map[], ty_tm_subst(t.tf.tx, t.targ, t.tf.tbody), L).Some?;
+    assert ty_eq(has_type(map[], ty_tm_subst(t.tf.tx, t.targ, t.tf.tbody), L).get, ty_ty_subst(ty_f.x, t.targ, ty_f.body));
   }
   /* TyApp */      else if (t.tyapp? && step(t.tf).Some?) {}
   else {}
