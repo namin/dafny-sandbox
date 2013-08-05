@@ -179,6 +179,21 @@ ghost method env_plus_concat3(X: int, E1: env, E2: env, E3: env)
   assert Env(E1.bds+E2.bds+E3.bds).bds == E1.bds+E2.bds+E3.bds;
   assert [bd_var(X)]+(E1.bds+E2.bds+E3.bds)==[bd_var(X)]+E1.bds+E2.bds+E3.bds;
 }
+ghost method env_concat_empty(E: env)
+  ensures env_concat(Env([]), E)==E;
+{
+  assert env_concat(Env([]), E)==Env(Env([]).bds+E.bds);
+  assert Env([]).bds==[];
+  assert []+E.bds==E.bds;
+}
+ghost method env_concat3_empty(E1: env, E2: env)
+  ensures env_concat3(Env([]), E1, E2)==env_concat(E1, E2);
+{
+  assert env_concat3(Env([]), E1, E2)==Env(Env([]).bds+E1.bds+E2.bds);
+  assert Env([]).bds==[];
+  assert []+E1.bds+E2.bds==E1.bds+E2.bds;
+}
+
 ghost method env_plus_uniq(X: int, E: env)
   requires X !in env_dom(E);
   requires env_uniq(E);
@@ -802,3 +817,14 @@ ghost method lemma_wf_typ_weakening(T: typ, E: env, F: env, G: env)
     }
   }
 }
+
+ghost method lemma_wf_typ_weaken_head(T: typ, E: env, F: env)
+  requires typ_wf(E, T);
+  requires env_uniq(env_concat(F, E));
+  ensures typ_wf(env_concat(F, E), T);
+{
+  env_concat3_empty(F, E);
+  env_concat_empty(E);
+  lemma_wf_typ_weakening(T, E, F, Env([]));
+}
+
