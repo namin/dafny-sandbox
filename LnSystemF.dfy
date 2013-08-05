@@ -257,6 +257,7 @@ ghost method env_concat3_dom(E1: env, E2: env, E3: env)
   bds_concat3_dom(E1.bds, E2.bds, E3.bds);
 }
 predicate bds_wf(bds: seq<binding>)
+  ensures bds_wf(bds) ==> bds_uniq(bds);
   decreases bds, 0;
 {
   |bds|==0 || (
@@ -266,6 +267,7 @@ predicate bds_wf(bds: seq<binding>)
 }
 predicate bd_wf(bd: binding, bds: seq<binding>)
   requires bds_wf(bds);
+  ensures bd_wf(bd, bds) ==> bd_uniq(bd, bds_dom(bds));
   decreases bds, 1;
 {
   match bd
@@ -273,6 +275,7 @@ predicate bd_wf(bd: binding, bds: seq<binding>)
   case bd_var(X) => X !in bds_dom(bds)
 }
 predicate env_wf(E: env)
+  ensures env_wf(E) ==> env_uniq(E);
 {
   bds_wf(E.bds)
 }
@@ -943,4 +946,37 @@ ghost method lemma_wf_typ_open(E: env, U: typ, T0: typ)
   env_concat_empty(E);
   env_concat3_empty(Env([bd_var(X)]), E);
   lemma_wf_typ_subst_tb(Env([]), E, X, U, open_tt(T0, typ_fvar(X)));
+}
+
+ghost method lemma_env_uniq_from_wf(E: env)
+  requires env_wf(E);
+  ensures env_uniq(E);
+{
+}
+
+ghost method env_concat_split(E: env)
+  requires |E.bds|>0;
+  ensures env_concat(Env([E.bds[0]]), Env(E.bds[1..]))==E;
+{
+  assert Env([E.bds[0]]).bds==[E.bds[0]];
+  assert Env(E.bds[1..]).bds==E.bds[1..];
+  assert [E.bds[0]]+E.bds[1..]==E.bds;
+}
+
+ghost method lemma_typ_wf_from_binds(x: int, U: typ, E: env)
+  requires env_wf(E);
+  requires env_lookup(x, E) == Some(U);
+  ensures typ_wf(E, U);
+  decreases |E.bds|;
+{
+  if (|E.bds|==0) {
+  } else {
+    if (E.bds[0].bd_typ? && E.bds[0].x==x) {
+      assert U == E.bds[0].ty;
+    } else {
+      lemma_typ_wf_from_binds(x, U, Env(E.bds[1..]));
+    }
+    lemma_wf_typ_weaken_head(U, Env(E.bds[1..]), Env([E.bds[0]]));
+    env_concat_split(E);
+  }
 }
