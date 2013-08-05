@@ -179,6 +179,15 @@ ghost method env_plus_concat3(X: int, E1: env, E2: env, E3: env)
   assert Env(E1.bds+E2.bds+E3.bds).bds == E1.bds+E2.bds+E3.bds;
   assert [bd_var(X)]+(E1.bds+E2.bds+E3.bds)==[bd_var(X)]+E1.bds+E2.bds+E3.bds;
 }
+ghost method env_extend_concat3(x: int, T: typ, E1: env, E2: env, E3: env)
+  ensures env_concat3(env_extend(x, T, E1), E2, E3)==env_extend(x, T, env_concat3(E1, E2, E3));
+{
+  assert env_concat3(env_extend(x, T, E1), E2, E3)==Env([bd_typ(x, T)]+E1.bds+E2.bds+E3.bds);
+  assert env_extend(x, T, env_concat3(E1, E2, E3))==Env([bd_typ(x, T)]+Env(E1.bds+E2.bds+E3.bds).bds);
+  assert Env(E1.bds+E2.bds+E3.bds).bds == E1.bds+E2.bds+E3.bds;
+  assert [bd_typ(x, T)]+(E1.bds+E2.bds+E3.bds)==[bd_typ(x, T)]+E1.bds+E2.bds+E3.bds;
+}
+
 ghost method env_concat_empty(E: env)
   ensures env_concat(Env([]), E)==E;
 {
@@ -958,8 +967,6 @@ ghost method env_concat_split(E: env)
   requires |E.bds|>0;
   ensures env_concat(Env([E.bds[0]]), Env(E.bds[1..]))==E;
 {
-  assert Env([E.bds[0]]).bds==[E.bds[0]];
-  assert Env(E.bds[1..]).bds==E.bds[1..];
   assert [E.bds[0]]+E.bds[1..]==E.bds;
 }
 
@@ -967,7 +974,7 @@ ghost method lemma_typ_wf_from_binds(x: int, U: typ, E: env)
   requires env_wf(E);
   requires env_lookup(x, E) == Some(U);
   ensures typ_wf(E, U);
-  decreases |E.bds|;
+  decreases E.bds;
 {
   if (|E.bds|==0) {
   } else {
@@ -985,4 +992,37 @@ ghost method lemma_wf_typ_from_wf_env_typ(x: int, T: typ, E: env)
   requires env_wf(env_extend(x, T, E));
   ensures typ_wf(E, T);
 {
+}
+
+ghost method env_concat3_split(E1: env, E2: env, E3: env)
+  requires |E1.bds|>0;
+  ensures env_concat(Env([E1.bds[0]]), env_concat3(Env(E1.bds[1..]), E2, E3))==env_concat3(E1, E2, E3);
+{
+  assert env_concat(Env([E1.bds[0]]), env_concat3(Env(E1.bds[1..]), E2, E3)).bds==E1.bds+E2.bds+E3.bds;
+}
+ghost method env_concat2_split(E1: env, E2: env)
+  requires |E1.bds|>0;
+  ensures env_concat(Env([E1.bds[0]]), env_concat(Env(E1.bds[1..]), E2))==env_concat(E1, E2);
+{
+  assert env_concat(Env([E1.bds[0]]), env_concat(Env(E1.bds[1..]), E2)).bds==E1.bds+E2.bds;
+}
+
+ghost method lemma_env_wf_strengthening(x: int, T: typ, E: env, F: env)
+  requires env_wf(env_concat3(F, Env([bd_typ(x, T)]), E));
+  ensures env_wf(env_concat(F, E));
+  decreases F.bds;
+{
+  if (|F.bds|==0) {
+    env_concat3_empty(Env([bd_typ(x, T)]), E);
+    env_concat_empty(E);
+  } else {
+    env_concat3_split(F, Env([bd_typ(x, T)]), E);
+    lemma_env_wf_strengthening(x, T, E, Env(F.bds[1..]));
+    env_concat2_split(F, E);
+    bds_concat3_dom(F.bds[1..], [bd_typ(x, T)], E.bds);
+    bds_concat_dom(F.bds[1..], E.bds);
+    if (F.bds[0].bd_typ?) {
+      lemma_wf_typ_strengthening(E, Env(F.bds[1..]), x, T, F.bds[0].ty);
+    }
+  }
 }
