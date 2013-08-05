@@ -980,3 +980,9 @@ ghost method lemma_typ_wf_from_binds(x: int, U: typ, E: env)
     env_concat_split(E);
   }
 }
+
+ghost method lemma_wf_typ_from_wf_env_typ(x: int, T: typ, E: env)
+  requires env_wf(env_extend(x, T, E));
+  ensures typ_wf(E, T);
+{
+}
