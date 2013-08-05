@@ -155,7 +155,36 @@ function bd_lookup(y: int, bd: binding): option<typ>
   case bd_typ(x, T) => if x==y then Some(T) else None
   case bd_var(X) => None
 }
-
+function env_concat(E1: env, E2: env): env
+{
+  Env(E1.bds+E2.bds)
+}
+function env_concat3(E1: env, E2: env, E3: env): env
+{
+  Env(E1.bds+E2.bds+E3.bds)
+}
+ghost method env_plus_concat(X: int, E1: env, E2: env)
+  ensures env_concat(env_plus_var(X, E1), E2)==env_plus_var(X, env_concat(E1, E2));
+{
+  assert env_concat(env_plus_var(X, E1), E2)==Env([bd_var(X)]+E1.bds+E2.bds);
+  assert env_plus_var(X, env_concat(E1, E2))==Env([bd_var(X)]+Env(E1.bds+E2.bds).bds);
+  assert Env(E1.bds+E2.bds).bds == E1.bds+E2.bds;
+  assert [bd_var(X)]+(E1.bds+E2.bds)==[bd_var(X)]+E1.bds+E2.bds;
+}
+ghost method env_plus_concat3(X: int, E1: env, E2: env, E3: env)
+  ensures env_concat3(env_plus_var(X, E1), E2, E3)==env_plus_var(X, env_concat3(E1, E2, E3));
+{
+  assert env_concat3(env_plus_var(X, E1), E2, E3)==Env([bd_var(X)]+E1.bds+E2.bds+E3.bds);
+  assert env_plus_var(X, env_concat3(E1, E2, E3))==Env([bd_var(X)]+Env(E1.bds+E2.bds+E3.bds).bds);
+  assert Env(E1.bds+E2.bds+E3.bds).bds == E1.bds+E2.bds+E3.bds;
+  assert [bd_var(X)]+(E1.bds+E2.bds+E3.bds)==[bd_var(X)]+E1.bds+E2.bds+E3.bds;
+}
+ghost method env_plus_uniq(X: int, E: env)
+  requires X !in env_dom(E);
+  requires env_uniq(E);
+  ensures env_uniq(env_plus_var(X, E));
+{
+}
 predicate typ_wf(E: env, T: typ)
   decreases typ_size(T);
 {
@@ -177,6 +206,36 @@ function bds_dom(bds: seq<binding>): set<int>
 {
   if |bds|==0 then {} else bd_dom(bds[0])+bds_dom(bds[1..])
 }
+function env_dom(E: env): set<int>
+{
+  bds_dom(E.bds)
+}
+ghost method bds_concat_dom(bds1: seq<binding>, bds2: seq<binding>)
+  ensures bds_dom(bds1+bds2)==bds_dom(bds1)+bds_dom(bds2);
+{
+  if (|bds1|==0) {
+    assert bds_dom(bds1)=={};
+    assert bds1+bds2==bds2;
+  } else {
+    bds_concat_dom(bds1[1..], bds2);
+    assert bds_dom(bds1[1..]+bds2)==bds_dom(bds1[1..])+bds_dom(bds2);
+    assert [bds1[0]]+bds1[1..]==bds1;
+    assert bd_dom(bds1[0])+bds_dom(bds1[1..])==bds_dom(bds1);
+    assert bds1[1..]+bds2 == (bds1+bds2)[1..];
+  }  
+}
+ghost method bds_concat3_dom(bds1: seq<binding>, bds2: seq<binding>, bds3: seq<binding>)
+  ensures bds_dom(bds1+bds2+bds3)==bds_dom(bds1)+bds_dom(bds2)+bds_dom(bds3);
+{
+  assert bds1+bds2+bds3==bds1+(bds2+bds3);
+  bds_concat_dom(bds1, bds2+bds3);
+  bds_concat_dom(bds2, bds3);
+}
+ghost method env_concat3_dom(E1: env, E2: env, E3: env)
+  ensures env_dom(env_concat3(E1, E2, E3))==env_dom(E1)+env_dom(E2)+env_dom(E3);
+{
+  bds_concat3_dom(E1.bds, E2.bds, E3.bds);
+}
 predicate bds_wf(bds: seq<binding>)
   decreases bds, 0;
 {
@@ -197,6 +256,26 @@ predicate env_wf(E: env)
 {
   bds_wf(E.bds)
 }
+predicate bds_uniq(bds: seq<binding>)
+  decreases bds, 0;
+{
+  |bds|==0 || (
+    var bds' := bds[1..];
+     bds_uniq(bds') && bd_uniq(bds[0], bds')
+  )
+}
+predicate bd_uniq(bd: binding, bds: seq<binding>)
+  requires bds_uniq(bds);
+  decreases bds, 1;
+{
+  match bd
+  case bd_typ(x, T) => x !in bds_dom(bds)
+  case bd_var(X) => X !in bds_dom(bds)
+}
+predicate env_uniq(E: env)
+{
+  bds_uniq(E.bds)
+}
 
 function typing(E: env, e: exp): option<typ>
   decreases exp_size(e);
@@ -211,8 +290,8 @@ function typing(E: env, e: exp): option<typ>
   case exp_app(e1, e2) => if (typing(E, e1).Some? && typing(E, e2).Some? && typing(E, e1).get.typ_arrow? && typing(E, e2).get==typing(E, e1).get.ty1) then
     Some(typing(E, e1).get.ty2)
     else None
-  case exp_tabs(e1) => if (exists L:seq<int>, T1 :: forall X :: X !in L ==> typing(env_plus_var(X, E), open_te(e1, typ_fvar(X)))==Some(open_tt(T1, typ_fvar(X)))) then
-    var L:seq<int>, T1 :| forall X :: X !in L ==> typing(env_plus_var(X, E), open_te(e1, typ_fvar(X)))==Some(open_tt(T1, typ_fvar(X)));
+  case exp_tabs(e1) => if (exists L:set<int>, T1 :: forall X :: X !in L ==> typing(env_plus_var(X, E), open_te(e1, typ_fvar(X)))==Some(open_tt(T1, typ_fvar(X)))) then
+    var L:set<int>, T1 :| forall X :: X !in L ==> typing(env_plus_var(X, E), open_te(e1, typ_fvar(X)))==Some(open_tt(T1, typ_fvar(X)));
     Some(typ_all(T1))
     else None
   case exp_tapp(e1, T) => if (typing(E, e1).Some? && typing(E, e1).get.typ_all?) then
@@ -681,4 +760,45 @@ ghost method lemma_open_ee_body_e(e1: exp, e2: exp)
   var x := notin(L');
   lemma_subst_ee_intro(x, e1, e2);
   lemma_subst_ee_expr(x, open_ee(e1, exp_fvar(x)), e2);
+}
+
+ghost method auto_infrastructure()
+  ensures  forall Z, P, T :: (typ_lc(T) && typ_lc(P)) ==> typ_lc(subst_tt(Z, P, T));
+{
+  forall (Z, P, T | typ_lc(T) && typ_lc(P))
+  ensures typ_lc(subst_tt(Z, P, T));
+  {
+    lemma_subst_tt_type(Z, P, T);
+  }
+}
+
+/// Lemmas
+/// https://github.com/plclub/metalib/blob/master/Fsub_LetSum_Lemmas.v
+
+ghost method {:induction E, T} lemma_typ_lc_from_wf(E: env, T: typ)
+  requires typ_wf(E, T);
+  ensures typ_lc(T);
+  decreases typ_size(T);
+{
+}
+
+ghost method lemma_wf_typ_weakening(T: typ, E: env, F: env, G: env)
+  requires typ_wf(env_concat(G, E), T);
+  requires env_uniq(env_concat3(G, F, E));
+  ensures typ_wf(env_concat3(G, F, E), T);
+  decreases typ_size(T);
+{
+  if (T.typ_all?) {
+    var L:set<int> :| forall X :: X !in L ==> typ_wf(env_plus_var(X, env_concat(G, E)), open_tt(T.ty0, typ_fvar(X)));
+    var L' := L+env_dom(G)+env_dom(F)+env_dom(E);
+    forall (X | X !in L')
+    ensures typ_wf(env_plus_var(X, env_concat3(G, F, E)), open_tt(T.ty0, typ_fvar(X)));
+    {
+      env_plus_concat(X, G, E);
+      env_plus_concat3(X, G, F, E);
+      env_concat3_dom(G, F, E);
+      env_plus_uniq(X, env_concat3(G, F, E));
+      lemma_wf_typ_weakening(open_tt(T.ty0, typ_fvar(X)), E, F, env_plus_var(X, G));
+    }
+  }
 }
