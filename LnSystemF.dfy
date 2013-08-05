@@ -929,3 +929,18 @@ ghost method lemma_wf_typ_subst_tb(F: env, E: env, Z: int, P: typ, T: typ)
     }
   }
 }
+
+ghost method lemma_wf_typ_open(E: env, U: typ, T0: typ)
+  requires env_uniq(E);
+  requires typ_wf(E, typ_all(T0));
+  requires typ_wf(E, U);
+  ensures typ_wf(E, open_tt(T0, U));
+{
+  var L:set<int> :| forall X :: X !in L ==> typ_wf(env_plus_var(X, E), open_tt(T0, typ_fvar(X)));
+  var L' := L+fv_tt(T0);
+  var X := notin(L');
+  lemma_subst_tt_intro(X, T0, U);
+  env_concat_empty(E);
+  env_concat3_empty(Env([bd_var(X)]), E);
+  lemma_wf_typ_subst_tb(Env([]), E, X, U, open_tt(T0, typ_fvar(X)));
+}
