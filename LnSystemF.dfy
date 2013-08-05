@@ -227,10 +227,12 @@ function bd_dom(bd: binding): set<int>
   case bd_var(X) => {X}
 }
 function bds_dom(bds: seq<binding>): set<int>
+  ensures forall X :: bd_var(X) in bds ==> X in bds_dom(bds);
 {
   if |bds|==0 then {} else bd_dom(bds[0])+bds_dom(bds[1..])
 }
 function env_dom(E: env): set<int>
+  ensures forall X :: env_has_var(X, E) ==> X in env_dom(E);
 {
   bds_dom(E.bds)
 }
@@ -1024,5 +1026,33 @@ ghost method lemma_env_wf_strengthening(x: int, T: typ, E: env, F: env)
     if (F.bds[0].bd_typ?) {
       lemma_wf_typ_strengthening(E, Env(F.bds[1..]), x, T, F.bds[0].ty);
     }
+  }
+}
+
+ghost method {:induction T, k} lemma_notin_fv_tt_open_rec(Y: int, X: int, T: typ, k: nat)
+  requires X !in fv_tt(open_tt_rec(k, typ_fvar(Y), T));
+  ensures X !in fv_tt(T);
+  decreases typ_size(T);
+{
+}
+ghost method lemma_notin_fv_tt_open(Y: int, X: int, T: typ)
+  requires X !in fv_tt(open_tt(T, typ_fvar(Y)));
+  ensures X !in fv_tt(T);
+{
+  lemma_notin_fv_tt_open_rec(Y, X, T, 0);
+}
+
+ghost method lemma_notin_fv_wf(E: env, X: int, T: typ)
+  requires typ_wf(E, T);
+  requires X !in env_dom(E);
+  ensures X !in fv_tt(T);
+  decreases typ_size(T);
+{
+  if (T.typ_all?) {
+    var L:set<int> :| forall Y :: Y !in L ==> typ_wf(env_plus_var(Y, E), open_tt(T.ty0, typ_fvar(Y)));
+    var L' := L+{X};
+    var Y := notin(L');
+    lemma_notin_fv_wf(env_plus_var(Y, E), X, open_tt(T.ty0, typ_fvar(Y)));
+    lemma_notin_fv_tt_open(Y, X, T.ty0);
   }
 }
