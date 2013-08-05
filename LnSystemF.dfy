@@ -828,3 +828,21 @@ ghost method lemma_wf_typ_weaken_head(T: typ, E: env, F: env)
   lemma_wf_typ_weakening(T, E, F, Env([]));
 }
 
+ghost method lemma_wf_typ_strengthening(E: env, F: env, x: int, U: typ, T: typ)
+  requires typ_wf(env_concat3(F, Env([bd_typ(x, U)]), E), T);
+  ensures typ_wf(env_concat(F, E), T);
+  decreases typ_size(T);
+{
+  if (T.typ_all?) {
+    var L:set<int> :| forall X :: X !in L ==> typ_wf(env_plus_var(X, env_concat3(F, Env([bd_typ(x, U)]), E)), open_tt(T.ty0, typ_fvar(X)));
+    var L' := L;
+    forall (X | X !in L')
+    ensures typ_wf(env_plus_var(X, env_concat(F, E)), open_tt(T.ty0, typ_fvar(X)));
+    {
+      env_plus_concat3(X, F, Env([bd_typ(x, U)]), E);
+      env_plus_concat(X, F, E);
+      lemma_wf_typ_strengthening(E, env_plus_var(X, F), x, U, open_tt(T.ty0, typ_fvar(X)));
+    }
+  }
+}
+
