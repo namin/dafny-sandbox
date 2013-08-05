@@ -108,7 +108,7 @@ function not_in(s: set<int>, r: nat): nat
 {
   if (!exists x :: x in s) then r+1 else
   var x :| x in s;
-  if (x<r) then not_in(s-{x}, r) else not_in(s-{x}, r)
+  if (x<r) then not_in(s-{x}, r) else not_in(s-{x}, x)
 }
 
 function ty_var_swap(X: int, Y: int, Z: int): int
