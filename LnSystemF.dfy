@@ -193,13 +193,13 @@ ghost method env_concat3_empty(E1: env, E2: env)
   assert Env([]).bds==[];
   assert []+E1.bds+E2.bds==E1.bds+E2.bds;
 }
-
 ghost method env_plus_uniq(X: int, E: env)
   requires X !in env_dom(E);
   requires env_uniq(E);
   ensures env_uniq(env_plus_var(X, E));
 {
 }
+
 predicate typ_wf(E: env, T: typ)
   decreases typ_size(T);
 {
@@ -239,6 +239,11 @@ ghost method bds_concat_dom(bds1: seq<binding>, bds2: seq<binding>)
     assert bds1[1..]+bds2 == (bds1+bds2)[1..];
   }  
 }
+ghost method env_concat_dom(E1: env, E2: env)
+  ensures env_dom(env_concat(E1, E2))==env_dom(E1)+env_dom(E2);
+{
+  bds_concat_dom(E1.bds, E2.bds);
+}
 ghost method bds_concat3_dom(bds1: seq<binding>, bds2: seq<binding>, bds3: seq<binding>)
   ensures bds_dom(bds1+bds2+bds3)==bds_dom(bds1)+bds_dom(bds2)+bds_dom(bds3);
 {
@@ -272,20 +277,18 @@ predicate env_wf(E: env)
   bds_wf(E.bds)
 }
 predicate bds_uniq(bds: seq<binding>)
-  decreases bds, 0;
+  decreases bds;
 {
   |bds|==0 || (
     var bds' := bds[1..];
-     bds_uniq(bds') && bd_uniq(bds[0], bds')
+     bds_uniq(bds') && bd_uniq(bds[0], bds_dom(bds'))
   )
 }
-predicate bd_uniq(bd: binding, bds: seq<binding>)
-  requires bds_uniq(bds);
-  decreases bds, 1;
+predicate bd_uniq(bd: binding, dom_bds: set<int>)
 {
   match bd
-  case bd_typ(x, T) => x !in bds_dom(bds)
-  case bd_var(X) => X !in bds_dom(bds)
+  case bd_typ(x, T) => x !in dom_bds
+  case bd_var(X) => X !in dom_bds
 }
 predicate env_uniq(E: env)
 {
@@ -846,3 +849,83 @@ ghost method lemma_wf_typ_strengthening(E: env, F: env, x: int, U: typ, T: typ)
   }
 }
 
+function subst_bd(Z: int, P: typ, bd: binding): binding
+  ensures bd.bd_var? ==> subst_bd(Z, P, bd)==bd;
+  ensures bd_dom(bd)==bd_dom(subst_bd(Z, P, bd));
+{
+  match bd
+  case bd_var(X) => bd_var(X)
+  case bd_typ(x, T) => bd_typ(x, subst_tt(Z, P, T))
+}
+function subst_bds(Z: int, P: typ, bds: seq<binding>): seq<binding>
+  ensures forall X :: bd_var(X) in bds ==> bd_var(X) in subst_bds(Z, P, bds);
+  ensures bds_dom(bds)==bds_dom(subst_bds(Z, P, bds));
+{
+  if (|bds|==0) then [] else
+  [subst_bd(Z, P, bds[0])]+subst_bds(Z, P, bds[1..])
+}
+function subst_env(Z: int, P: typ, E: env): env
+  ensures forall X :: env_has_var(X, E) ==> env_has_var(X, subst_env(Z, P, E));
+  ensures env_dom(E)==env_dom(subst_env(Z, P, E));
+{
+  Env(subst_bds(Z, P, E.bds))
+}
+ghost method bds_uniq_subst(Z: int, P: typ, bds: seq<binding>)
+  requires bds_uniq(bds);
+  ensures bds_uniq(subst_bds(Z, P, bds));
+{
+}
+ghost method env_uniq_subst(Z: int, P: typ, E: env)
+  requires env_uniq(E);
+  ensures env_uniq(subst_env(Z, P, E));
+{
+  bds_uniq_subst(Z, P, E.bds);
+}
+ghost method bds_subst_uniq(Z: int, P: typ, bds: seq<binding>)
+  requires bds_uniq(subst_bds(Z, P, bds));
+  ensures bds_uniq(bds);
+{
+  var sbds := subst_bds(Z, P, bds);
+  if (|sbds|==0) {
+  } else {
+    var sbds' := sbds[1..];
+    var bds' := bds[1..];
+    bds_subst_uniq(Z, P, bds');
+    assert bds_dom(sbds')==bds_dom(bds');
+  }
+}
+ghost method env_subst_uniq(Z: int, P: typ, E: env)
+  requires env_uniq(subst_env(Z, P, E));
+  ensures env_uniq(E);
+{
+  bds_subst_uniq(Z, P, E.bds);
+}
+
+ghost method lemma_wf_typ_subst_tb(F: env, E: env, Z: int, P: typ, T: typ)
+  requires typ_wf(env_concat3(F, Env([bd_var(Z)]), E), T);
+  requires typ_wf(E, P);
+  requires env_uniq(env_concat(subst_env(Z, P, F), E));
+  ensures typ_wf(env_concat(subst_env(Z, P, F), E), subst_tt(Z, P, T));
+  decreases typ_size(T);
+{
+  if (T.typ_fvar?) {
+    if (T.a == Z) {
+      assert subst_tt(Z, P, T)==P;
+      lemma_wf_typ_weaken_head(P, E, subst_env(Z, P, F));
+    }
+  } else if (T.typ_all?) {
+    var L:set<int> :| forall X :: X !in L ==> typ_wf(env_plus_var(X, env_concat3(F, Env([bd_var(Z)]), E)), open_tt(T.ty0, typ_fvar(X)));
+    var L' := L+env_dom(E)+env_dom(F)+{Z};
+    forall (X | X !in L')
+    ensures typ_wf(env_plus_var(X, env_concat(subst_env(Z, P, F), E)), open_tt(subst_tt(Z, P, T.ty0), typ_fvar(X)));
+    {
+      env_plus_concat3(X, F, Env([bd_var(Z)]), E);
+      env_plus_concat(X, subst_env(Z, P, F), E);
+      env_concat_dom(subst_env(Z, P, F), E);
+      env_plus_uniq(X, env_concat(subst_env(Z, P, F), E));
+      lemma_wf_typ_subst_tb(env_plus_var(X, F), E, Z, P, open_tt(T.ty0, typ_fvar(X)));
+      lemma_typ_lc_from_wf(E, P);
+      lemma_subst_tt_open_tt_var(Z, X, P, T.ty0);
+    }
+  }
+}
