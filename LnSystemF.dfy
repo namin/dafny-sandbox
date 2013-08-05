@@ -1056,3 +1056,20 @@ ghost method lemma_notin_fv_wf(E: env, X: int, T: typ)
     lemma_notin_fv_tt_open(Y, X, T.ty0);
   }
 }
+
+ghost method lemma_map_subst_tb_id(G: env, Z: int, P: typ)
+  requires env_wf(G);
+  requires Z !in env_dom(G);
+  ensures G==subst_env(Z, P, G);
+  decreases G.bds;
+{
+  if (|G.bds|==0) {
+  } else {
+    if (G.bds[0].bd_typ?) {
+      lemma_notin_fv_wf(Env(G.bds[1..]), Z, G.bds[0].ty);
+      lemma_subst_tt_fresh(Z, P, G.bds[0].ty);
+    }
+    env_concat_split(G);
+    lemma_map_subst_tb_id(Env(G.bds[1..]), Z, P);
+  }
+}
