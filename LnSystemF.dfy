@@ -671,3 +671,14 @@ ghost method lemma_subst_ee_expr(z: int, e1: exp, e2: exp)
   }
 }
 
+ghost method lemma_open_ee_body_e(e1: exp, e2: exp)
+  requires body_lc(e1);
+  requires exp_lc(e2);
+  ensures exp_lc(open_ee(e1, e2));
+{
+  var L:set<int> :| forall x :: x !in L ==> exp_lc(open_ee(e1, exp_fvar(x)));
+  var L' := L+fv_ee(e1);
+  var x := notin(L');
+  lemma_subst_ee_intro(x, e1, e2);
+  lemma_subst_ee_expr(x, open_ee(e1, exp_fvar(x)), e2);
+}
