@@ -596,3 +596,78 @@ ghost method lemma_subst_ee_intro(x: int, e: exp, u: exp)
   lemma_subst_ee_intro_rec(x, e, u, 0);
 }
 
+ghost method lemma_subst_tt_type(Z: int, P: typ, T: typ)
+  requires typ_lc(T);
+  requires typ_lc(P);
+  ensures typ_lc(subst_tt(Z, P, T));
+  decreases typ_size(T);
+{
+  if (T.typ_all?) {
+    var L:set<int> :| forall X :: X !in L ==> typ_lc(open_tt(T.ty0, typ_fvar(X)));
+    var L' := L+{Z};
+    forall (X | X !in L')
+    ensures typ_lc(open_tt(subst_tt(Z, P, T.ty0), typ_fvar(X)));
+    {
+      lemma_subst_tt_type(Z, P, open_tt(T.ty0, typ_fvar(X)));
+      lemma_subst_tt_open_tt_var(Z, X, P, T.ty0);
+    }
+  }
+}
+
+ghost method lemma_subst_te_expr(Z: int, P: typ, e: exp)
+  requires exp_lc(e);
+  requires typ_lc(P);
+  ensures exp_lc(subst_te(Z, P, e));
+  decreases exp_size(e);
+{
+  forall (V | V<e && typ_lc(V))
+  ensures typ_lc(subst_tt(Z, P, V));
+  {
+    lemma_subst_tt_type(Z, P, V);
+  }
+  if (e.exp_abs?) {
+    var L:set<int> :| forall x :: x !in L ==> exp_lc(open_ee(e.e0, exp_fvar(x)));
+    forall (x | x !in L)
+    ensures exp_lc(open_ee(subst_te(Z, P, e.e0), exp_fvar(x)));
+    {
+      lemma_subst_te_expr(Z, P, open_ee(e.e0, exp_fvar(x)));
+      lemma_subst_te_open_ee_var(Z, x, P, e.e0);
+    }
+  } else if (e.exp_tabs?) {
+    var L:set<int> :| forall X :: X !in L ==> exp_lc(open_te(e.te0, typ_fvar(X)));
+    var L' := L+{Z};
+    forall (X | X !in L')
+    ensures exp_lc(open_te(subst_te(Z, P, e.te0), typ_fvar(X)));
+    {
+      lemma_subst_te_expr(Z, P, open_te(e.te0, typ_fvar(X)));
+      lemma_subst_te_open_te_var(Z, X, P, e.te0);
+    }
+  }
+}
+
+ghost method lemma_subst_ee_expr(z: int, e1: exp, e2: exp)
+  requires exp_lc(e1);
+  requires exp_lc(e2);
+  ensures exp_lc(subst_ee(z, e2, e1));
+  decreases exp_size(e1);
+{
+  if (e1.exp_abs?) {
+    var L:set<int> :| forall x :: x !in L ==> exp_lc(open_ee(e1.e0, exp_fvar(x)));
+    var L' := L+{z};
+    forall (x | x !in L')
+    ensures exp_lc(open_ee(subst_ee(z, e2, e1.e0), exp_fvar(x)));
+    {
+      lemma_subst_ee_expr(z, open_ee(e1.e0, exp_fvar(x)), e2);
+      lemma_subst_ee_open_ee_var(z, x, e2, e1.e0);
+    }
+  } else if (e1.exp_tabs?) {
+    var L:set<int> :| forall X :: X !in L ==> exp_lc(open_te(e1.te0, typ_fvar(X)));
+    forall (X | X !in L)
+    ensures exp_lc(open_te(subst_ee(z, e2, e1.te0), typ_fvar(X)));
+    {
+      lemma_subst_ee_expr(z, open_te(e1.te0, typ_fvar(X)), e2);
+      lemma_subst_ee_open_te_var(z, X, e2, e1.te0);
+    }
+  }
+}
+
