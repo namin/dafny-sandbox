@@ -250,3 +250,135 @@ function red(e: exp): option<exp>
     Some(open_te(e.tf.te0, e.targ))
   else None
 }
+
+/// Infrastructure
+/// https://github.com/plclub/metalib/blob/master/Fsub_LetSum_Infrastructure.v
+
+function fv_tt(T: typ): set<int>
+{
+  match T
+  case typ_top => {}
+  case typ_bvar(J) => {}
+  case typ_fvar(X) => {X}
+  case typ_arrow(T1, T2) => fv_tt(T1) + fv_tt(T2)
+  case typ_all(T1) => fv_tt(T1)
+}
+
+function fv_te(e: exp): set<int>
+{
+  match e
+  case exp_bvar(i) => {}
+  case exp_fvar(x) => {}
+  case exp_abs(V, e1)  => fv_tt(V) + fv_te(e1)
+  case exp_app(e1, e2) => fv_te(e1) + fv_te(e2)
+  case exp_tabs(e1) => fv_te(e1)
+  case exp_tapp(e1, V) => fv_tt(V) + fv_te(e1)
+}
+
+function fv_ee(e: exp): set<int>
+{
+  match e
+  case exp_bvar(i) => {}
+  case exp_fvar(x) => {x}
+  case exp_abs(V, e1) => fv_ee(e1)
+  case exp_app(e1, e2) => fv_ee(e1) + fv_ee(e2)
+  case exp_tabs(e1) => fv_ee(e1)
+  case exp_tapp(e1, V) => fv_ee(e1)
+}
+
+function subst_tt (Z: int, U: typ, T : typ): typ
+  decreases T;
+{
+  match T
+  case typ_top => typ_top
+  case typ_bvar(J) => typ_bvar(J)
+  case typ_fvar(X) => if X == Z then U else T
+  case typ_arrow(T1, T2) => typ_arrow(subst_tt(Z, U, T1), subst_tt(Z, U, T2))
+  case typ_all(T1) => typ_all(subst_tt(Z, U, T1))
+}
+function subst_te(Z: int, U: typ, e : exp): exp
+  decreases e;
+{
+  match e
+  case exp_bvar(i) => exp_bvar(i)
+  case exp_fvar(x) => exp_fvar(x)
+  case exp_abs(V, e1) => exp_abs(subst_tt(Z, U, V),subst_te(Z, U, e1))
+  case exp_app(e1, e2) => exp_app(subst_te(Z, U, e1), subst_te(Z, U, e2))
+  case exp_tabs(e1) => exp_tabs(subst_te(Z, U, e1))
+  case exp_tapp(e1, V) => exp_tapp(subst_te(Z, U, e1), subst_tt(Z, U, V))
+}
+function subst_ee(z: int, u: exp, e: exp): exp
+  decreases e;
+{
+  match e
+  case exp_bvar(i) => exp_bvar(i)
+  case exp_fvar(x) => if x == z then u else e
+  case exp_abs(V, e1) => exp_abs(V, subst_ee(z, u, e1))
+  case exp_app(e1, e2) => exp_app(subst_ee(z, u, e1), subst_ee(z, u, e2))
+  case exp_tabs(e1) => exp_tabs(subst_ee(z, u, e1))
+  case exp_tapp(e1, V) => exp_tapp(subst_ee(z, u, e1), V)
+}
+
+ghost method {:induction T, j, i} lemma_open_tt_rec_type_aux(T: typ, j: nat, V: typ, i: nat, U: typ)
+  requires i != j;
+  requires open_tt_rec(j, V, T) == open_tt_rec(i, U, open_tt_rec(j, V, T));
+  ensures T == open_tt_rec(i, U, T);
+{
+}
+
+ghost method lemma_open_tt_rec_type(T: typ, U: typ, k: nat)
+  requires typ_lc(T);
+  ensures T == open_tt_rec(k, U, T);
+  decreases typ_size(T);
+{
+  if (T.typ_all?) {
+    var L:set<int> :| forall X :: X !in L ==> typ_lc(open_tt(T.ty0, typ_fvar(X)));
+    var X := notin(L);
+    lemma_open_tt_rec_type(open_tt(T.ty0, typ_fvar(X)), U, k+1);
+    lemma_open_tt_rec_type_aux(T.ty0, 0, typ_fvar(X), k+1, U);
+  }
+}
+
+ghost method lemma_subst_tt_fresh(Z: int, U: typ, T: typ)
+  requires Z !in fv_tt(T);
+  ensures T == subst_tt(Z, U, T);
+{
+}
+
+ghost method lemma_subst_tt_open_tt_rec(T1: typ, T2: typ, X: int, P: typ, k: nat)
+  requires typ_lc(P);
+  ensures subst_tt(X, P, open_tt_rec(k, T2, T1))
+       == open_tt_rec(k, subst_tt(X, P, T2), subst_tt(X, P, T1));
+{
+  if (T1.typ_fvar? && T1.a==X) {
+    lemma_open_tt_rec_type(P, subst_tt(X, P, T2), k);
+  }
+}
+
+ghost method lemma_subst_tt_open_tt(T1: typ, T2: typ, X: int, P: typ)
+  requires typ_lc(P);
+  ensures subst_tt(X, P, open_tt(T1, T2)) == open_tt(subst_tt(X, P, T1), subst_tt(X, P, T2));
+{
+  lemma_subst_tt_open_tt_rec(T1, T2, X, P, 0);
+}
+
+ghost method lemma_subst_tt_open_tt_var(X: int, Y: int, P: typ, T: typ)
+  requires Y != X;
+  requires typ_lc(P);
+  ensures open_tt(subst_tt(X, P, T), typ_fvar(Y)) == subst_tt(X, P, open_tt(T, typ_fvar(Y)));
+{
+  lemma_subst_tt_open_tt(T, typ_fvar(Y), X, P);
+}
+
+ghost method lemma_subst_tt_intro_rec(X: int, T2: typ, U: typ, k: nat)
+  requires X !in fv_tt(T2);
+  ensures open_tt_rec(k, U, T2) == subst_tt(X, U, open_tt_rec(k, typ_fvar(X), T2));
+{
+}
+
+ghost method lemma_subst_tt_intro(X: int, T2: typ, U: typ)
+  requires X !in fv_tt(T2);
+  ensures open_tt(T2, U) == subst_tt(X, U, open_tt(T2, typ_fvar(X)));
+{
+  lemma_subst_tt_intro_rec(X, T2, U, 0);
+}
