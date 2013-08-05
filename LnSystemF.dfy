@@ -382,3 +382,100 @@ ghost method lemma_subst_tt_intro(X: int, T2: typ, U: typ)
 {
   lemma_subst_tt_intro_rec(X, T2, U, 0);
 }
+
+ghost method {:induction e, j, i} lemma_open_te_rec_expr_aux(e: exp, j: nat, u: exp, i: nat, P: typ)
+  requires open_ee_rec(j, u, e) == open_te_rec(i, P, open_ee_rec(j, u, e));
+  ensures e == open_te_rec(i, P, e);
+{
+}
+
+ghost method {:induction e, j, i} lemma_open_te_rec_type_aux(e: exp, j: nat, Q: typ, i: nat, P: typ)
+  requires i != j;
+  requires open_te_rec(j, Q, e) == open_te_rec(i, P, open_te_rec(j, Q, e));
+  ensures e == open_te_rec(i, P, e);
+{
+  forall (V | i !=j && open_tt_rec(j, Q, V) == open_tt_rec(i, P, open_tt_rec(j, Q, V)))
+  ensures V == open_tt_rec(i, P, V);
+  {
+    lemma_open_tt_rec_type_aux(V, j, Q, i, P);
+  }
+}
+
+ghost method lemma_open_te_rec_expr(e: exp, U: typ, k: nat)
+  requires exp_lc(e);
+  ensures e == open_te_rec(k, U, e);
+  decreases exp_size(e);
+{
+  forall (V | typ_lc(V))
+  ensures V == open_tt_rec(k, U, V);
+  {
+    lemma_open_tt_rec_type(V, U, k);
+  }
+  if (e.exp_abs?) {
+    var L:set<int> :| forall x :: x !in L ==> exp_lc(open_ee(e.e0, exp_fvar(x)));
+    var x := notin(L);
+    lemma_open_te_rec_expr(open_ee(e.e0, exp_fvar(x)), U, k);
+    lemma_open_te_rec_expr_aux(e.e0, 0, exp_fvar(x), k, U);
+  } else if (e.exp_tabs?) {
+    var L:set<int> :| forall X :: X !in L ==> exp_lc(open_te(e.te0, typ_fvar(X)));
+    var X := notin(L);
+    lemma_open_te_rec_type_aux(e.te0, 0, typ_fvar(X), k+1, U);
+  }
+}
+
+ghost method lemma_subst_te_fresh(X: int, U: typ, e: exp)
+  requires X !in fv_te(e);
+  ensures e == subst_te(X, U, e);
+{
+  forall (T | X !in fv_tt(T))
+  ensures T == subst_tt(X, U, T);
+  {
+    lemma_subst_tt_fresh(X, U, T);
+  }
+}
+
+ghost method lemma_subst_te_open_te_rec(e: exp, T: typ, X: int, U: typ, k: nat)
+  requires typ_lc(U);
+  ensures subst_te(X, U, open_te_rec(k, T, e))
+       == open_te_rec(k, subst_tt(X, U, T), subst_te(X, U, e));
+{
+  forall (V | V<e)
+  ensures subst_tt(X, U, open_tt_rec(k, T, V))
+       == open_tt_rec(k, subst_tt(X, U, T), subst_tt(X, U, V));
+  {
+    lemma_subst_tt_open_tt_rec(V, T, X, U, k);
+  }
+}
+
+ghost method lemma_subst_te_open_te(e: exp, T: typ, X: int, U: typ)
+  requires typ_lc(U);
+  ensures subst_te(X, U, open_te(e, T)) == open_te(subst_te(X, U, e), subst_tt(X, U, T));
+{
+  lemma_subst_te_open_te_rec(e, T, X, U, 0);
+}
+
+ghost method lemma_subst_te_open_te_var(X: int, Y: int, U: typ, e: exp)
+  requires Y != X;
+  requires typ_lc(U);
+  ensures open_te(subst_te(X, U, e), typ_fvar(Y)) == subst_te(X, U, open_te(e, typ_fvar(Y)));
+{
+  lemma_subst_te_open_te(e, typ_fvar(Y), X, U);
+}
+
+ghost method lemma_subst_te_intro_rec(X: int, e: exp, U: typ, k: nat)
+  requires X !in fv_te(e);
+  ensures open_te_rec(k, U, e) == subst_te(X, U, open_te_rec(k, typ_fvar(X), e));
+{
+  forall (V | V<e && X !in fv_tt(V))
+  ensures open_tt_rec(k, U, V) == subst_tt(X, U, open_tt_rec(k, typ_fvar(X), V));
+  {
+    lemma_subst_tt_intro_rec(X, V, U, k);
+  }
+}
+
+ghost method lemma_subst_te_intro(X: int, e: exp, U: typ)
+  requires X !in fv_te(e);
+  ensures open_te(e, U) == subst_te(X, U, open_te(e, typ_fvar(X)));
+{
+  lemma_subst_te_intro_rec(X, e, U, 0);
+}
