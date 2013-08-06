@@ -1174,7 +1174,7 @@ ghost method {:timeLimit 20} lemma_typing_regular(E: env, e: exp, T: typ)
       lemma_typing_regular(env_plus_var(X, E), open_te(e.te0, typ_fvar(X)), open_tt(T1, typ_fvar(X)));
     }
   } else if (e.exp_tapp?) {
-    var Tf :| typing(E, e.tf, Tf);
+    var Tf :| typing(E, e.tf, Tf) && Tf.typ_all? && typ_wf(E, e.targ) && open_tt(Tf.ty0, e.targ)==T;
     lemma_typing_regular(E, e.tf, Tf);
     lemma_wf_typ_open(E, e.targ, Tf.ty0);
     lemma_typ_lc_from_wf(E, e.targ);
@@ -1267,6 +1267,21 @@ ghost method lemma_typing_weakening(E: env, F: env, G: env, e: exp, T: typ)
     }
   case exp_app(e1, e2) =>
   case exp_tabs(e1) => 
-  case exp_tapp(e1, T) =>
+    var L:set<int> :| forall X :: X !in L ==> typing(env_plus_var(X, H), open_te(e1, typ_fvar(X)), open_tt(T.ty0, typ_fvar(X)));
+    var L' := L+env_dom(G)+env_dom(F)+env_dom(E);
+    env_concat3_dom(G, F, E);
+    forall (X | X !in L')
+    ensures typing(env_plus_var(X, H'), open_te(e1, typ_fvar(X)), open_tt(T.ty0, typ_fvar(X)));
+    {
+      lemma_typing_regular(env_plus_var(X, H), open_te(e1, typ_fvar(X)), open_tt(T.ty0, typ_fvar(X)));
+      env_plus_concat(X, G, E);
+      env_plus_concat3(X, G, F, E);
+      env_plus_uniq(X, H');
+      lemma_typing_weakening(E, F, env_plus_var(X, G), open_te(e1, typ_fvar(X)), open_tt(T.ty0, typ_fvar(X)));
+    }
+  case exp_tapp(e1, T2) =>
+    var T1 :| typing(H, e1, T1) && T1.typ_all? && typ_wf(H, T2) && open_tt(T1.ty0, T2)==T;
+    lemma_typing_weakening(E, F, G, e1, T1);
+    lemma_wf_typ_weakening(T2, E, F, G);
   }
 }
