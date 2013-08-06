@@ -1086,7 +1086,7 @@ ghost method lemma_map_subst_tb_id(G: env, Z: int, P: typ)
 
 /// Regularity
 
-ghost method lemma_typing_regular(E: env, e: exp, T: typ)
+ghost method {:timeLimit 20} lemma_typing_regular(E: env, e: exp, T: typ)
   requires typing(E, e) == Some(T);
   ensures env_wf(E);
   ensures exp_lc(e);
@@ -1137,5 +1137,32 @@ ghost method lemma_typing_regular(E: env, e: exp, T: typ)
     lemma_wf_typ_open(E, e.targ, Tf.ty0);
     lemma_typ_lc_from_wf(E, e.targ);
   } else {
+  }
+}
+
+ghost method lemma_value_regular(e: exp)
+  requires value(e);
+  ensures exp_lc(e);
+{
+}
+
+ghost method {:induction e, e'} red_regular(e: exp, e': exp)
+  requires red(e) == Some(e');
+  ensures exp_lc(e);
+  ensures exp_lc(e');
+{
+  if (e.exp_app? && value(e.f) && value(e.arg)) {
+    lemma_value_regular(e.f);
+    lemma_value_regular(e.arg);
+    lemma_open_ee_body_e(e.f.e0, e.arg);
+  }
+  else if (e.exp_tapp? && value(e.tf) && typ_lc(e.targ)) {
+    lemma_value_regular(e.tf);
+    assert e'==open_te(e.tf.te0, e.targ);
+    var L:set<int> :| forall X :: X !in L ==> exp_lc(open_te(e.tf.te0, typ_fvar(X)));
+    var L' := L+fv_te(e.tf.te0);
+    var X := notin(L');
+    lemma_subst_te_intro(X, e.tf.te0, e.targ);
+    lemma_subst_te_expr(X, e.targ, open_te(e.tf.te0, typ_fvar(X)));
   }
 }
