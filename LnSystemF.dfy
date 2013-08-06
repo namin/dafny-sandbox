@@ -146,6 +146,7 @@ function env_extend(x: int, T: typ, E: env): env
   Env([bd_typ(x, T)]+E.bds)
 }
 function env_lookup(x: int, E: env): option<typ>
+  ensures env_lookup(x, E).Some? ==> bd_typ(x, env_lookup(x, E).get) in E.bds;
 {
   bds_lookup(x, E.bds)
 }
@@ -193,7 +194,13 @@ ghost method bds_lookup_notin_dom(y: int, bds: seq<binding>)
     }
   }
 }
-
+ghost method env_lookup_in(x: int, T: typ, E: env)
+  requires env_uniq(E);
+  requires bd_typ(x, T) in E.bds;
+  ensures env_lookup(x, E) == Some(T);
+{
+  bds_lookup_in(x, T, E.bds);
+}
 function env_concat(E1: env, E2: env): env
 {
   Env(E1.bds+E2.bds)
@@ -1283,5 +1290,65 @@ ghost method lemma_typing_weakening(E: env, F: env, G: env, e: exp, T: typ)
     var T1 :| typing(H, e1, T1) && T1.typ_all? && typ_wf(H, T2) && open_tt(T1.ty0, T2)==T;
     lemma_typing_weakening(E, F, G, e1, T1);
     lemma_wf_typ_weakening(T2, E, F, G);
+  }
+}
+
+ghost method lemma_typing_through_subst_ee(U: typ, E: env, F: env, x: int, T: typ, e: exp, u: exp)
+  requires typing(env_concat3(F, Env([bd_typ(x, U)]), E), e, T);
+  requires typing(E, u, U);
+  ensures typing(env_concat(F, E), subst_ee(x, u, e), T);
+  decreases exp_size(e);
+{
+  var H' := env_concat3(F, Env([bd_typ(x, U)]), E);
+  var H := env_concat(F, E);
+  lemma_typing_regular(env_concat3(F, Env([bd_typ(x, U)]), E), e, T);
+  lemma_env_wf_strengthening(x, U, E, F);
+  lemma_env_uniq_from_wf(H');
+  lemma_env_uniq_from_wf(H);
+  lemma_typing_regular(E, u, U);
+  match e {
+  case exp_bvar(i) =>
+  case exp_fvar(a) =>
+    if (a==x) {
+      assert subst_ee(x, u, e)==u;
+      env_lookup_in(x, U, H');
+      assert U==T;
+      env_concat_empty(E);
+      env_concat3_empty(F, E);
+      lemma_typing_weakening(E, F, Env([]), u, U);
+      assert typing(env_concat3(Env([]), F, E), u, U);
+      assert typing(env_concat(F, E), u, U);
+    } else {
+      assert env_lookup(a, H') == Some(T);
+      assert bd_typ(a, T) in H'.bds;
+      env_lookup_in(a, T, H);
+    }
+  case exp_abs(V, e1) =>
+    var L:set<int> :| forall y :: y !in L ==> typing(env_extend(y, V, H'), open_ee(e1, exp_fvar(y)), T.ty2);
+    var L' := L+{x};
+    forall (y | y !in L')
+    ensures typing(env_extend(y, V, H), open_ee(subst_ee(x, u, e1), exp_fvar(y)), T.ty2);
+    {
+      env_extend_concat3(y, V, F, Env([bd_typ(x, U)]), E);
+      env_extend_concat(y, V, F, E);
+      lemma_typing_through_subst_ee(U, E, env_extend(y, V, F), x, T.ty2, open_ee(e1, exp_fvar(y)), u);
+      lemma_subst_ee_open_ee_var(x, y, u, e1);
+    }
+  case exp_app(e1, e2) =>
+  case exp_tabs(e1) =>
+    var L:set<int> :| forall X :: X !in L ==> typing(env_plus_var(X, H'), open_te(e1, typ_fvar(X)), open_tt(T.ty0, typ_fvar(X)));
+    var L' := L;
+    forall (X | X !in L')
+    ensures typing(env_plus_var(X, H), open_te(subst_ee(x, u, e1), typ_fvar(X)), open_tt(T.ty0, typ_fvar(X)));
+    {
+      env_plus_concat3(X, F, Env([bd_typ(x, U)]), E);
+      env_plus_concat(X, F, E);
+      lemma_typing_through_subst_ee(U, E, env_plus_var(X, F), x, open_tt(T.ty0, typ_fvar(X)), open_te(e1, typ_fvar(X)), u);
+      lemma_subst_ee_open_te_var(x, X, u, e1);
+    }
+  case exp_tapp(e1, T2) =>
+    var T1 :| typing(H', e1, T1) && T1.typ_all? && typ_wf(H', T2) && open_tt(T1.ty0, T2)==T;
+    lemma_typing_through_subst_ee(U, E, F, x, T1, e1, u);
+    lemma_wf_typ_strengthening(E, F, x, U, T2); 
   }
 }
