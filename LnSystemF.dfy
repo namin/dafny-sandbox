@@ -1248,11 +1248,7 @@ ghost method lemma_typing_weakening(E: env, F: env, G: env, e: exp, T: typ)
   case exp_bvar(i) =>
   case exp_fvar(x) =>
     env_weakening_lookup(E, F, G, x, T);
-  case exp_abs(V, e1) => /*if (exists T1 :: exists L:set<int> :: forall x :: x !in L ==> typing(env_extend(x, V, E), open_ee(e1, exp_fvar(x))) == Some(T1)) then
-    var T1 :| exists L:set<int> :: forall x :: x !in L ==> typing(env_extend(x, V, E), open_ee(e1, exp_fvar(x))) == Some(T1);
-    var L:set<int> :| forall x :: x !in L ==> typing(env_extend(x, V, E), open_ee(e1, exp_fvar(x))) == Some(T1);
-    Some(typ_arrow(V, T1))
-    else None*/
+  case exp_abs(V, e1) =>
     var T1 := T.ty2;
     var L:set<int> :| forall x :: x !in L ==> typing(env_extend(x, V, H), open_ee(e1, exp_fvar(x)), T1);
     var L' := L+env_dom(G)+env_dom(F)+env_dom(E);
@@ -1269,16 +1265,8 @@ ghost method lemma_typing_weakening(E: env, F: env, G: env, e: exp, T: typ)
      env_wf_extend(x, V, H');
       lemma_typing_weakening(E, F, env_extend(x, V, G), open_ee(e1, exp_fvar(x)), T1);
     }
-  case exp_app(e1, e2) => /*if (typing(E, e1).Some? && typing(E, e2).Some? && typing(E, e1).get.typ_arrow? && typing(E, e2).get==typing(E, e1).get.ty1) then
-    Some(typing(E, e1).get.ty2)
-    else None*/
-  case exp_tabs(e1) => /*if (exists T1 :: exists L:set<int> :: forall X :: X !in L ==> typing(env_plus_var(X, E), open_te(e1, typ_fvar(X)))==Some(open_tt(T1, typ_fvar(X)))) then
-    var T1 :| exists L:set<int> :: forall X :: X !in L ==> typing(env_plus_var(X, E), open_te(e1, typ_fvar(X)))==Some(open_tt(T1, typ_fvar(X)));
-    var L:set<int> :| forall X :: X !in L ==> typing(env_plus_var(X, E), open_te(e1, typ_fvar(X)))==Some(open_tt(T1, typ_fvar(X)));
-    Some(typ_all(T1))
-    else None*/
-  case exp_tapp(e1, T) => /*if (typing(E, e1).Some? && typing(E, e1).get.typ_all? && typ_wf(E, T)) then
-    Some(open_tt(typing(E, e1).get.ty0, T))
-    else None*/
+  case exp_app(e1, e2) =>
+  case exp_tabs(e1) => 
+  case exp_tapp(e1, T) =>
   }
 }
