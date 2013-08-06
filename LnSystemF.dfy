@@ -1,5 +1,9 @@
 datatype option<A> = None | Some(get: A);
 function chain(a: option, b: option): option
+  ensures a.None? ==> chain(a, b)==b;
+  ensures a.Some? ==> chain(a, b)==a;
+  ensures chain(a, b)==a || chain(a, b)==b;
+  ensures chain(a, b).Some? <==> (a.Some? || b.Some?);
 {
   if (a.None?) then b else a
 }
@@ -146,15 +150,50 @@ function env_lookup(x: int, E: env): option<typ>
   bds_lookup(x, E.bds)
 }
 function bds_lookup(x: int, bds: seq<binding>): option<typ>
+  ensures bds_lookup(x, bds).Some? ==> |bds|>0;
+  ensures bds_lookup(x, bds).Some? ==> (bd_lookup(x, bds[0]).Some? || bds_lookup(x, bds[1..]).Some?);
+  ensures bds_lookup(x, bds).Some? ==> bd_typ(x, bds_lookup(x, bds).get) in bds;
 {
   if |bds|==0 then None else chain(bd_lookup(x, bds[0]), bds_lookup(x, bds[1..]))
 }
 function bd_lookup(y: int, bd: binding): option<typ>
+  ensures bd_lookup(y, bd).Some? ==> (bd.bd_typ? && bd.x==y);
 {
   match bd
   case bd_typ(x, T) => if x==y then Some(T) else None
   case bd_var(X) => None
 }
+ghost method bds_lookup_in(x: int, T: typ, bds: seq<binding>)
+  requires bds_uniq(bds);
+  requires bd_typ(x, T) in bds;
+  ensures bds_lookup(x, bds) == Some(T);
+{
+  if (|bds|==0) {}
+  else {
+    if (bd_lookup(x, bds[0]).Some?) {
+      bds_lookup_notin_dom(x, bds[1..]);
+    } else {
+    }
+  }
+}
+ghost method bds_lookup_notin_dom(y: int, bds: seq<binding>)
+  requires y !in bds_dom(bds);
+  ensures forall T :: bd_typ(y, T) !in bds;
+{
+  forall (T: typ)
+  ensures bd_typ(y, T) !in bds;
+  {
+    if (|bds|==0) {
+    } else {
+      if (bds[0].bd_typ? && bds[0].x==y) {
+        assert false;
+      } else {
+        bds_lookup_notin_dom(y, bds[1..]);
+      }
+    }
+  }
+}
+
 function env_concat(E1: env, E2: env): env
 {
   Env(E1.bds+E2.bds)
@@ -216,7 +255,12 @@ ghost method env_plus_uniq(X: int, E: env)
   ensures env_uniq(env_plus_var(X, E));
 {
 }
-
+ghost method env_extend_uniq(x: int, T: typ, E: env)
+  requires x !in env_dom(E);
+  requires env_uniq(E);
+  ensures env_uniq(env_extend(x, T, E));
+{
+}
 predicate typ_wf(E: env, T: typ)
   decreases typ_size(T);
 {
@@ -298,7 +342,15 @@ predicate env_wf(E: env)
 {
   bds_wf(E.bds)
 }
+ghost method env_wf_extend(x: int, T: typ, E: env)
+  requires env_wf(E);
+  requires x !in env_dom(E);
+  requires typ_wf(E, T);
+  ensures env_wf(env_extend(x, T, E));
+{
+}
 predicate bds_uniq(bds: seq<binding>)
+  ensures (bds_uniq(bds) && |bds|>0) ==> bd_uniq(bds[0], bds_dom(bds[1..]));
   decreases bds;
 {
   |bds|==0 || (
@@ -1164,5 +1216,82 @@ ghost method {:induction e, e'} red_regular(e: exp, e': exp)
     var X := notin(L');
     lemma_subst_te_intro(X, e.tf.te0, e.targ);
     lemma_subst_te_expr(X, e.targ, open_te(e.tf.te0, typ_fvar(X)));
+  }
+}
+
+/// Soundness
+/// https://github.com/plclub/metalib/blob/master/Fsub_LetSum_Soundness.v
+
+ghost method bds_weakening_lookup(E: seq<binding>, F: seq<binding>, G: seq<binding>, x: int, T: typ)
+  requires bds_lookup(x,G+E) == Some(T);
+  requires bds_uniq(G+E);
+  requires bds_uniq(G+F+E);
+  ensures bds_lookup(x, G+F+E) == Some(T);
+{
+  assert bd_typ(x, T) in G+E;
+  assert bd_typ(x, T) in G || bd_typ(x, T) in E;
+  assert bd_typ(x, T) in G+F+E;
+  bds_lookup_in(x, T, G+F+E);
+}
+ghost method env_weakening_lookup(E: env, F: env, G: env, x: int, T: typ)
+  requires env_lookup(x, env_concat(G, E)) == Some(T);
+  requires env_wf(env_concat(G, E));
+  requires env_wf(env_concat3(G, F, E));
+  ensures env_lookup(x, env_concat3(G, F, E)) == Some(T);
+{
+  lemma_env_uniq_from_wf(env_concat(G, E));
+  lemma_env_uniq_from_wf(env_concat3(G, F, E));
+  bds_weakening_lookup(E.bds, F.bds, G.bds, x, T);
+}
+
+ghost method lemma_typing_weakening(E: env, F: env, G: env, e: exp, T: typ)
+  requires typing(env_concat(G, E), e) == Some(T);
+  requires env_wf(env_concat3(G, F, E));
+  ensures typing(env_concat3(G, F, E), e) == Some(T);
+  decreases exp_size(e);
+{
+  var H := env_concat(G, E);
+  var H' := env_concat3(G, F, E);
+  lemma_env_uniq_from_wf(H');
+  lemma_typing_regular(env_concat(G, E), e, T);
+  match e {
+  case exp_bvar(i) =>
+  case exp_fvar(x) =>
+    env_weakening_lookup(E, F, G, x, T);
+  case exp_abs(V, e1) => /*if (exists T1 :: exists L:set<int> :: forall x :: x !in L ==> typing(env_extend(x, V, E), open_ee(e1, exp_fvar(x))) == Some(T1)) then
+    var T1 :| exists L:set<int> :: forall x :: x !in L ==> typing(env_extend(x, V, E), open_ee(e1, exp_fvar(x))) == Some(T1);
+    var L:set<int> :| forall x :: x !in L ==> typing(env_extend(x, V, E), open_ee(e1, exp_fvar(x))) == Some(T1);
+    Some(typ_arrow(V, T1))
+    else None*/
+    var T1 :| exists L:set<int> :: forall x :: x !in L ==> typing(env_extend(x, V, H), open_ee(e1, exp_fvar(x))) == Some(T1);
+    var L:set<int> :| forall x :: x !in L ==> typing(env_extend(x, V, H), open_ee(e1, exp_fvar(x))) == Some(T1);
+    var L' := L+env_dom(G)+env_dom(F)+env_dom(E);
+    env_concat3_dom(G, F, E);
+    lemma_wf_typ_weakening(V, E, F, G);
+    forall (x | x !in L')
+    ensures typing(env_extend(x, V, H'), open_ee(e1, exp_fvar(x))) == Some(T1);
+    {
+      lemma_typing_regular(env_extend(x, V, H), open_ee(e1, exp_fvar(x)), T1);
+      env_extend_concat(x, V, G, E);
+      env_extend_concat3(x, V, G, F, E);
+      env_extend_uniq(x, V, H');
+      lemma_typ_wf_from_binds(x, V, env_extend(x, V, H));
+     env_wf_extend(x, V, H');
+      lemma_typing_weakening(E, F, env_extend(x, V, G), open_ee(e1, exp_fvar(x)), T1);
+    }
+    assert forall x :: x !in L' ==> typing(env_extend(x, V, H'), open_ee(e1, exp_fvar(x))) == Some(T1);
+    assert exists L':set<int> :: forall x :: x !in L' ==> typing(env_extend(x, V, H'), open_ee(e1, exp_fvar(x))) == Some(T1);
+    assert exists T1 :: exists L':set<int> :: forall x :: x !in L' ==> typing(env_extend(x, V, H'), open_ee(e1, exp_fvar(x))) == Some(T1);
+  case exp_app(e1, e2) => /*if (typing(E, e1).Some? && typing(E, e2).Some? && typing(E, e1).get.typ_arrow? && typing(E, e2).get==typing(E, e1).get.ty1) then
+    Some(typing(E, e1).get.ty2)
+    else None*/
+  case exp_tabs(e1) => /*if (exists T1 :: exists L:set<int> :: forall X :: X !in L ==> typing(env_plus_var(X, E), open_te(e1, typ_fvar(X)))==Some(open_tt(T1, typ_fvar(X)))) then
+    var T1 :| exists L:set<int> :: forall X :: X !in L ==> typing(env_plus_var(X, E), open_te(e1, typ_fvar(X)))==Some(open_tt(T1, typ_fvar(X)));
+    var L:set<int> :| forall X :: X !in L ==> typing(env_plus_var(X, E), open_te(e1, typ_fvar(X)))==Some(open_tt(T1, typ_fvar(X)));
+    Some(typ_all(T1))
+    else None*/
+  case exp_tapp(e1, T) => /*if (typing(E, e1).Some? && typing(E, e1).get.typ_all? && typ_wf(E, T)) then
+    Some(open_tt(typing(E, e1).get.ty0, T))
+    else None*/
   }
 }
