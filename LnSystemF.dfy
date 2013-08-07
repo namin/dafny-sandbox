@@ -1722,3 +1722,24 @@ ghost method {:induction E, e, e', T} lemma_preservation(E: env, e: exp, e': exp
     }
   }
 }
+
+ghost method lemma_canonical_form_abs(e: exp, U1: typ, U2: typ)
+  requires value(e);
+  requires typing(Env([]), e, typ_arrow(U1, U2));
+  ensures e.exp_abs?;
+{
+}
+
+ghost method lemma_canonical_form_tabs(e: exp, U0: typ)
+  requires value(e);
+  requires typing(Env([]), e, typ_all(U0));
+  ensures e.exp_tabs?;
+{
+}
+
+ghost method {:induction e, T} lemma_progress(e: exp, T: typ)
+  requires typing(Env([]), e, T);
+  ensures value(e) || red(e).Some?;
+{
+  lemma_typing_regular(Env([]), e, T);
+}
