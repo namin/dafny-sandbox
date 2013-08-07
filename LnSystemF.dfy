@@ -465,6 +465,9 @@ ghost method bds_concat3_dom(bds1: seq<binding>, bds2: seq<binding>, bds3: seq<b
 ghost method env_concat3_concat2(E1: env, E2: env, E3: env)
   ensures env_concat3(E1, E2, E3)==env_concat(E1, env_concat(E2, E3));
 {
+  assert env_concat3(E1, E2, E3).bds==E1.bds+E2.bds+E3.bds;
+  assert env_concat(E2, E3).bds==E2.bds+E3.bds;
+  assert env_concat(E1, env_concat(E2, E3)).bds==E1.bds+E2.bds+E3.bds;
 }
 ghost method env_concat3_dom(E1: env, E2: env, E3: env)
   ensures env_dom(env_concat3(E1, E2, E3))==env_dom(E1)+env_dom(E2)+env_dom(E3);
@@ -1095,7 +1098,7 @@ function subst_env(Z: int, P: typ, E: env): env
 {
   Env(subst_bds(Z, P, E.bds))
 }
-ghost method bds_uniq_subst_part(Z: int, P: typ, bds1: seq<binding>, bds2: seq<binding>)
+ghost method {:timeLimit 20} bds_uniq_subst_part(Z: int, P: typ, bds1: seq<binding>, bds2: seq<binding>)
   requires bds_uniq(bds1+bds2);
   ensures bds_uniq(subst_bds(Z, P, bds1)+bds2);
 {
@@ -1182,7 +1185,7 @@ ghost method lemma_wf_typ_subst_tb(F: env, E: env, Z: int, P: typ, T: typ)
   }
 }
 
-ghost method {:timeLimit 20} lemma_wf_typ_open(E: env, U: typ, T0: typ)
+ghost method {:timeLimit 30} lemma_wf_typ_open(E: env, U: typ, T0: typ)
   requires env_uniq(E);
   requires typ_wf(E, typ_all(T0));
   requires typ_wf(E, U);
@@ -1596,7 +1599,7 @@ ghost method lemma_typing_through_subst_ee(U: typ, E: env, F: env, x: int, T: ty
   }
 }
 
-ghost method lemma_typing_through_subst_te(E: env, F: env, Z: int, e: exp, T: typ, P: typ)
+ghost method {:timeLimit 20} lemma_typing_through_subst_te(E: env, F: env, Z: int, e: exp, T: typ, P: typ)
   requires typing(env_concat3(F, Env([bd_var(Z)]), E), e, T);
   requires typ_wf(E, P);
   ensures typing(env_concat(subst_env(Z, P, F), E), subst_te(Z, P, e), subst_tt(Z, P, T));
@@ -1649,11 +1652,10 @@ ghost method lemma_typing_through_subst_te(E: env, F: env, Z: int, e: exp, T: ty
       lemma_typing_through_subst_te(E, env_extend(x, V, F), Z, open_ee(e1, exp_fvar(x)), T.ty2, P);
       lemma_subst_te_open_ee_var(Z, x, P, e1);
     }
-  case exp_app(e1, e2) => //exists T1 :: typing(E, e1, typ_arrow(T1, T)) && typing(E, e2, T1)
+  case exp_app(e1, e2) =>
     var T1 :| typing(H, e1, typ_arrow(T1, T)) && typing(H, e2, T1);
     lemma_typing_through_subst_te(E, F, Z, e1, typ_arrow(T1, T), P);
-  case exp_tabs(e1) => //T.typ_all? &&
-    //(exists L:set<int> :: forall X :: X !in L ==> typing(env_plus_var(X, E), open_te(e1, typ_fvar(X)), open_tt(T.ty0, typ_fvar(X))))
+  case exp_tabs(e1) =>
     var L:set<int> :| forall X :: X !in L ==> typing(env_plus_var(X, H), open_te(e1, typ_fvar(X)), open_tt(T.ty0, typ_fvar(X)));
     var L' := L+{Z};
     forall (X | X !in L')
@@ -1665,6 +1667,10 @@ ghost method lemma_typing_through_subst_te(E: env, F: env, Z: int, e: exp, T: ty
       lemma_subst_te_open_te_var(Z, X, P, e1);
       lemma_subst_tt_open_tt_var(Z, X, P, T.ty0);
     }
-  case exp_tapp(e1, T2) => //exists T1 :: typing(E, e1, T1) && T1.typ_all? && typ_wf(E, T2) && open_tt(T1.ty0, T2)==T
+  case exp_tapp(e1, T2) =>
+    var T1 :| typing(H, e1, T1) && T1.typ_all? && typ_wf(H, T2) && open_tt(T1.ty0, T2)==T;
+    lemma_typing_through_subst_te(E, F, Z, e1, T1, P);
+    lemma_wf_typ_subst_tb(F, E, Z, P, T2);
+    lemma_subst_tt_open_tt(T1.ty0, T2, Z, P);
   }
 }
