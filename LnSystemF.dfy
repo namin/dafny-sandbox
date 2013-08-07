@@ -1637,8 +1637,17 @@ ghost method lemma_typing_through_subst_te(E: env, F: env, Z: int, e: exp, T: ty
       env_concat3_empty(F', E);
       env_weakening_lookup(E, F', Env([]), a, T);
     }
-  case exp_abs(V, e1) => //T.typ_arrow? &&
-    //T.ty1==V && (exists L:set<int> :: forall x :: x !in L ==> typing(env_extend(x, V, E), open_ee(e1, exp_fvar(x)), T.ty2))
+  case exp_abs(V, e1) =>
+    var L:set<int> :| forall x :: x !in L ==> typing(env_extend(x, V, H), open_ee(e1, exp_fvar(x)), T.ty2);
+    var L' := L;
+    forall (x | x !in L')
+    ensures typing(env_extend(x, subst_tt(Z, P, V), H'), open_ee(subst_te(Z, P, e1), exp_fvar(x)), subst_tt(Z, P, T.ty2));
+    {
+      env_extend_concat3(x, V, F, Env([bd_var(Z)]), E);
+      env_extend_concat(x, subst_tt(Z, P, V), F', E);
+      lemma_typing_through_subst_te(E, env_extend(x, V, F), Z, open_ee(e1, exp_fvar(x)), T.ty2, P);
+      lemma_subst_te_open_ee_var(Z, x, P, e1);
+    }
   case exp_app(e1, e2) => //exists T1 :: typing(E, e1, typ_arrow(T1, T)) && typing(E, e2, T1)
   case exp_tabs(e1) => //T.typ_all? &&
     //(exists L:set<int> :: forall X :: X !in L ==> typing(env_plus_var(X, E), open_te(e1, typ_fvar(X)), open_tt(T.ty0, typ_fvar(X))))
