@@ -1614,6 +1614,7 @@ ghost method lemma_typing_through_subst_te(E: env, F: env, Z: int, e: exp, T: ty
   env_wf_tail(env_concat(F, Env([bd_var(Z)])), E);
   env_concat3_concat2(F, Env([bd_var(Z)]), E);
   env_wf_tail(F, env_concat(Env([bd_var(Z)]), E));
+  lemma_typ_lc_from_wf(E, P);
   match e {
   case exp_bvar(i) =>
   case exp_fvar(a) =>
@@ -1649,8 +1650,21 @@ ghost method lemma_typing_through_subst_te(E: env, F: env, Z: int, e: exp, T: ty
       lemma_subst_te_open_ee_var(Z, x, P, e1);
     }
   case exp_app(e1, e2) => //exists T1 :: typing(E, e1, typ_arrow(T1, T)) && typing(E, e2, T1)
+    var T1 :| typing(H, e1, typ_arrow(T1, T)) && typing(H, e2, T1);
+    lemma_typing_through_subst_te(E, F, Z, e1, typ_arrow(T1, T), P);
   case exp_tabs(e1) => //T.typ_all? &&
     //(exists L:set<int> :: forall X :: X !in L ==> typing(env_plus_var(X, E), open_te(e1, typ_fvar(X)), open_tt(T.ty0, typ_fvar(X))))
+    var L:set<int> :| forall X :: X !in L ==> typing(env_plus_var(X, H), open_te(e1, typ_fvar(X)), open_tt(T.ty0, typ_fvar(X)));
+    var L' := L+{Z};
+    forall (X | X !in L')
+    ensures typing(env_plus_var(X, H'), open_te(subst_te(Z, P, e1), typ_fvar(X)), open_tt(subst_tt(Z, P, T.ty0), typ_fvar(X)));
+    {
+      env_plus_concat3(X, F, Env([bd_var(Z)]), E);
+      env_plus_concat(X, F', E);
+      lemma_typing_through_subst_te(E, env_plus_var(X, F), Z, open_te(e1, typ_fvar(X)), open_tt(T.ty0, typ_fvar(X)), P);
+      lemma_subst_te_open_te_var(Z, X, P, e1);
+      lemma_subst_tt_open_tt_var(Z, X, P, T.ty0);
+    }
   case exp_tapp(e1, T2) => //exists T1 :: typing(E, e1, T1) && T1.typ_all? && typ_wf(E, T2) && open_tt(T1.ty0, T2)==T
   }
 }
