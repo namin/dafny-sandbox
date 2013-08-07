@@ -132,6 +132,14 @@ predicate body_lc(e: exp)
 datatype binding =
     bd_typ(x: int, ty: typ)
   | bd_var(X: int)
+function var_name(bd: binding): int
+  ensures bd.bd_var? ==> var_name(bd)==bd.X;
+  ensures bd.bd_typ? ==> var_name(bd)==bd.x;
+{
+  match bd
+  case bd_typ(x, T) => x
+  case bd_var(X) => X
+}
 datatype env = Env(bds: seq<binding>)
 function env_plus_var(X: int, E: env): env
 {
@@ -249,12 +257,26 @@ ghost method env_concat_empty(E: env)
   assert Env([]).bds==[];
   assert []+E.bds==E.bds;
 }
+ghost method env_concat_empty'(E: env)
+  ensures env_concat(E, Env([]))==E;
+{
+  assert env_concat(E, Env([]))==Env(E.bds+Env([]).bds);
+  assert Env([]).bds==[];
+  assert E.bds+[]==E.bds;
+}
 ghost method env_concat3_empty(E1: env, E2: env)
   ensures env_concat3(Env([]), E1, E2)==env_concat(E1, E2);
 {
   assert env_concat3(Env([]), E1, E2)==Env(Env([]).bds+E1.bds+E2.bds);
   assert Env([]).bds==[];
   assert []+E1.bds+E2.bds==E1.bds+E2.bds;
+}
+ghost method env_concat3_empty'(E1: env, E2: env)
+  ensures env_concat3(E1, E2, Env([]))==env_concat(E1, E2);
+{
+  assert env_concat3(E1, E2, Env([]))==Env(E1.bds+E2.bds+Env([]).bds);
+  assert Env([]).bds==[];
+  assert E1.bds+E2.bds+[]==E1.bds+E2.bds;
 }
 ghost method env_plus_uniq(X: int, E: env)
   requires X !in env_dom(E);
@@ -267,6 +289,125 @@ ghost method env_extend_uniq(x: int, T: typ, E: env)
   requires env_uniq(E);
   ensures env_uniq(env_extend(x, T, E));
 {
+}
+ghost method bds_notin_dom_drop(i: nat, x: int, bds: seq<binding>)
+  requires x !in bds_dom(bds);
+  requires i<=|bds|;
+  ensures x !in bds_dom(bds[i..]);
+  decreases i;
+{
+  if (i==0) {
+    assert bds[0..]==bds;
+  } else {
+    bds_notin_dom_drop(i-1, x, bds[1..]);
+    assert bds[i..]==bds[1..][i-1..];
+  }
+}
+ghost method bds_notin_dom_take(j: nat, x: int, bds: seq<binding>)
+  requires x !in bds_dom(bds);
+  requires j<=|bds|;
+  ensures x !in bds_dom(bds[..j]);
+  decreases j;
+{
+  if (j==0) {
+    assert bds[..j]==[];
+  } else {
+    bds_notin_dom_take(j-1, x, bds[1..]);
+    assert bds[..j]==[bds[0]]+bds[1..][..j-1];
+  }
+}
+ghost method bds_notin_dom_slice(i: nat, j: nat, x: int, bds: seq<binding>)
+  requires x !in bds_dom(bds);
+  requires 0<=i<=j<=|bds|;
+  ensures x !in bds_dom(bds[i..j]);
+{
+  bds_notin_dom_take(j, x, bds);
+  bds_notin_dom_drop(i, x, bds[..j]);
+}
+ghost method bds_dom_split(x: int, E: seq<binding>, F: seq<binding>)
+  requires x !in bds_dom(E+F);
+  ensures x !in bds_dom(E);
+  ensures x !in bds_dom(F);
+{
+  assert (E+F)[0..|E|]==E;
+  assert (E+F)[|E|..|E+F|]==F;
+  bds_notin_dom_slice(0, |E|, x, E+F);
+  bds_notin_dom_slice(|E|, |E+F|, x, E+F);
+}
+ghost method bds_uniq_one(i: nat, bds: seq<binding>)
+  requires bds_uniq(bds);
+  requires i<|bds|;
+  ensures bd_uniq(bds[i], bds_dom(bds[i+1..]));
+{
+  if (i==0) {
+    assert bds[0+1..]==bds[1..];
+  } else {
+    bds_uniq_one(i-1, bds[1..]);
+    assert bds[1..][i-1+1..]==bds[i+1..];
+  }
+}
+ghost method bds_uniq_weaken1(E: seq<binding>, bd: binding, G: seq<binding>)
+  requires bds_uniq(E+[bd]+G);
+  ensures bds_uniq(E+G);
+{
+  if (E==[]) {
+    assert []+G==G;
+  } else {
+    assert (E+[bd]+G)[1..]==E[1..]+[bd]+G;
+    bds_uniq_weaken1(E[1..], bd, G);
+    assert bd_uniq(E[0], bds_dom(E[1..]+[bd]+G));
+    var x := if (E[0].bd_typ?) then E[0].x else E[0].X;
+    assert x !in bds_dom(E[1..]+[bd]+G);
+    bds_dom_split(x, E[1..]+[bd], G);
+    bds_dom_split(x, E[1..], [bd]);
+    assert x !in bds_dom(E[1..])+bds_dom(G);
+    bds_concat_dom(E[1..], G);
+    assert bd_uniq(E[0], bds_dom(E[1..]+G));
+    assert [E[0]]+E[1..]+G==E+G;
+    assert (E+G)[0]==E[0];
+    assert (E+G)[1..]==E[1..]+G;
+  }
+}
+ghost method bds_uniq_weaken(E: seq<binding>, F: seq<binding>, G: seq<binding>)
+  requires bds_uniq(E+F+G);
+  ensures bds_uniq(E+G);
+  decreases F;
+{
+  if (F==[]) {
+    assert E+F+G==E+G;
+  } else {
+    assert E+[F[0]]+F[1..]+G==E+F+G;
+    bds_uniq_weaken(E+[F[0]], F[1..], G);
+    bds_uniq_weaken1(E, F[0], G);
+  }
+}
+ghost method env_uniq_weaken(E: env, F: env, G: env)
+  requires env_uniq(env_concat3(E,F,G));
+  ensures env_uniq(env_concat(E,G));
+{
+  bds_uniq_weaken(E.bds, F.bds, G.bds);
+}
+ghost method bds_uniq_concat(E: seq<binding>, F: seq<binding>)
+  requires bds_uniq(E+F);
+  ensures bds_uniq(E);
+  ensures bds_uniq(F);
+{
+  if (E==[]) {
+    assert []+F==F;
+  } else {
+    assert E[1..]+F==(E+F)[1..];
+    assert E[0]==(E+F)[0];
+    bds_uniq_concat(E[1..], F);
+    assert bd_uniq(E[0], bds_dom(E[1..]+F));
+    bds_dom_split(var_name(E[0]), E[1..], F);
+  }
+}
+ghost method env_uniq_concat(E: env, F: env)
+  requires env_uniq(env_concat(E,F));
+  ensures env_uniq(E);
+  ensures env_uniq(F);
+{
+  bds_uniq_concat(E.bds, F.bds);
 }
 predicate typ_wf(E: env, T: typ)
   decreases typ_size(T);
@@ -321,6 +462,10 @@ ghost method bds_concat3_dom(bds1: seq<binding>, bds2: seq<binding>, bds3: seq<b
   bds_concat_dom(bds1, bds2+bds3);
   bds_concat_dom(bds2, bds3);
 }
+ghost method env_concat3_concat2(E1: env, E2: env, E3: env)
+  ensures env_concat3(E1, E2, E3)==env_concat(E1, env_concat(E2, E3));
+{
+}
 ghost method env_concat3_dom(E1: env, E2: env, E3: env)
   ensures env_dom(env_concat3(E1, E2, E3))==env_dom(E1)+env_dom(E2)+env_dom(E3);
 {
@@ -358,7 +503,9 @@ ghost method env_wf_extend(x: int, T: typ, E: env)
 }
 predicate bds_uniq(bds: seq<binding>)
   ensures (bds_uniq(bds) && |bds|>0) ==> bd_uniq(bds[0], bds_dom(bds[1..]));
-  decreases bds;
+  ensures (bds_uniq(bds) && |bds|>0 && bds[0].bd_var?) ==> bds[0].X !in bds_dom(bds[1..]);
+  ensures (bds_uniq(bds) && |bds|>0 && bds[0].bd_typ?) ==> bds[0].x !in bds_dom(bds[1..]);
+  decreases |bds|;
 {
   |bds|==0 || (
     var bds' := bds[1..];
@@ -366,6 +513,8 @@ predicate bds_uniq(bds: seq<binding>)
   )
 }
 predicate bd_uniq(bd: binding, dom_bds: set<int>)
+  ensures bd.bd_typ? ==> (bd.x !in dom_bds <==> bd_uniq(bd, dom_bds));
+  ensures bd.bd_var? ==> (bd.X !in dom_bds <==> bd_uniq(bd, dom_bds));
 {
   match bd
   case bd_typ(x, T) => x !in dom_bds
@@ -924,6 +1073,7 @@ ghost method lemma_wf_typ_strengthening(E: env, F: env, x: int, U: typ, T: typ)
 
 function subst_bd(Z: int, P: typ, bd: binding): binding
   ensures bd.bd_var? ==> subst_bd(Z, P, bd)==bd;
+  ensures bd.bd_typ? ==> subst_bd(Z, P, bd)==bd_typ(bd.x, subst_tt(Z, P, bd.ty));
   ensures bd_dom(bd)==bd_dom(subst_bd(Z, P, bd));
 {
   match bd
@@ -932,6 +1082,7 @@ function subst_bd(Z: int, P: typ, bd: binding): binding
 }
 function subst_bds(Z: int, P: typ, bds: seq<binding>): seq<binding>
   ensures forall X :: bd_var(X) in bds ==> bd_var(X) in subst_bds(Z, P, bds);
+  ensures forall x :: bds_lookup(x, bds).Some? ==> bds_lookup(x, subst_bds(Z, P, bds)).Some? &&  subst_tt(Z, P, bds_lookup(x, bds).get)==bds_lookup(x, subst_bds(Z, P, bds)).get;
   ensures bds_dom(bds)==bds_dom(subst_bds(Z, P, bds));
 {
   if (|bds|==0) then [] else
@@ -939,9 +1090,37 @@ function subst_bds(Z: int, P: typ, bds: seq<binding>): seq<binding>
 }
 function subst_env(Z: int, P: typ, E: env): env
   ensures forall X :: env_has_var(X, E) ==> env_has_var(X, subst_env(Z, P, E));
+  ensures forall x :: env_lookup(x, E).Some? ==> env_lookup(x, subst_env(Z, P, E)).Some? &&  subst_tt(Z, P, env_lookup(x, E).get)==env_lookup(x, subst_env(Z, P, E)).get;
   ensures env_dom(E)==env_dom(subst_env(Z, P, E));
 {
   Env(subst_bds(Z, P, E.bds))
+}
+ghost method bds_uniq_subst_part(Z: int, P: typ, bds1: seq<binding>, bds2: seq<binding>)
+  requires bds_uniq(bds1+bds2);
+  ensures bds_uniq(subst_bds(Z, P, bds1)+bds2);
+{
+  if (bds1==[]) {
+  } else {
+    assert (bds1+bds2)[1..]==bds1[1..]+bds2;
+    bds_uniq_subst_part(Z, P, bds1[1..], bds2);
+    assert bds1[0]==(bds1+bds2)[0];
+    assert [subst_bd(Z, P, bds1[0])]+subst_bds(Z, P, bds1[1..])==subst_bds(Z, P, bds1);
+    assert [subst_bd(Z, P, bds1[0])]+subst_bds(Z, P, bds1[1..])+bds2==subst_bds(Z, P, bds1)+bds2;
+    assert ([subst_bd(Z, P, bds1[0])]+subst_bds(Z, P, bds1[1..])+bds2)[1..]==(subst_bds(Z, P, bds1)+bds2)[1..];
+    assert subst_bds(Z, P, bds1[1..])+bds2==(subst_bds(Z, P, bds1)+bds2)[1..];
+    assert bd_uniq(bds1[0], bds_dom((bds1+bds2)[1..]));
+    assert bd_uniq(subst_bd(Z, P, bds1[0]), bds_dom((bds1+bds2)[1..]));
+    bds_concat_dom(bds1[1..], bds2);
+    assert bds_dom(bds1[1..])+bds_dom(bds2)==bds_dom(subst_bds(Z, P, bds1[1..]))+bds_dom(bds2);
+    bds_concat_dom(subst_bds(Z, P, bds1[1..]), bds2);
+    assert bd_uniq(subst_bd(Z, P, bds1[0]), bds_dom(subst_bds(Z, P, bds1[1..])+bds2));
+  }
+}
+ghost method env_uniq_subst_part(Z: int, P: typ, E: env, F: env)
+  requires env_uniq(env_concat(E,F));
+  ensures env_uniq(env_concat(subst_env(Z, P, E), F));
+{
+  bds_uniq_subst_part(Z, P, E.bds, F.bds);
 }
 ghost method bds_uniq_subst(Z: int, P: typ, bds: seq<binding>)
   requires bds_uniq(bds);
@@ -1003,7 +1182,7 @@ ghost method lemma_wf_typ_subst_tb(F: env, E: env, Z: int, P: typ, T: typ)
   }
 }
 
-ghost method lemma_wf_typ_open(E: env, U: typ, T0: typ)
+ghost method {:timeLimit 20} lemma_wf_typ_open(E: env, U: typ, T0: typ)
   requires env_uniq(E);
   requires typ_wf(E, typ_all(T0));
   requires typ_wf(E, U);
@@ -1086,6 +1265,63 @@ ghost method lemma_env_wf_strengthening(x: int, T: typ, E: env, F: env)
       lemma_wf_typ_strengthening(E, Env(F.bds[1..]), x, T, F.bds[0].ty);
     }
   }
+}
+
+ghost method lemma_bds_wf_subst_tb(Z: int, P: typ, E: seq<binding>, F: seq<binding>)
+  requires bds_wf(F+[bd_var(Z)]+E);
+  requires typ_wf(Env(E), P);
+  ensures bds_wf(subst_bds(Z, P, F)+E);
+  decreases F;
+{
+  if (|F|==0) {
+    assert F+[bd_var(Z)]+E==[bd_var(Z)]+E;
+    assert subst_bds(Z, P, F)+E==E;
+  } else {
+    assert (F+[bd_var(Z)]+E)[1..]==F[1..]+[bd_var(Z)]+E;
+    lemma_bds_wf_subst_tb(Z, P, E, F[1..]);
+    assert (subst_bds(Z, P, F)+E)[1..]==subst_bds(Z, P, F[1..])+E;
+    assert (subst_bds(Z, P, F)+E)[0]==subst_bd(Z, P, F[0]);
+    var x;
+    if (F[0].bd_typ?) {
+      lemma_wf_typ_subst_tb(Env(F[1..]), Env(E), Z, P, F[0].ty);
+      assert typ_wf(env_concat(subst_env(Z, P, Env(F[1..])), Env(E)), subst_tt(Z, P, F[0].ty));
+      assert env_concat(subst_env(Z, P, Env(F[1..])), Env(E))==Env(subst_bds(Z, P, F[1..])+E);
+      x := F[0].x;
+    } else {
+      x := F[0].X;
+    }
+    bds_concat_dom(F[1..], E);
+    bds_concat_dom(subst_bds(Z, P, F[1..]), E);
+    bds_dom_split(x, F[1..]+[bd_var(Z)], E);
+    bds_dom_split(x, F[1..], [bd_var(Z)]);
+    assert x !in bds_dom(F[1..]+E);
+    assert bds_dom(subst_bds(Z, P, F[1..])+E)==bds_dom(F[1..]+E);
+    assert bd_wf(subst_bd(Z, P, F[0]), subst_bds(Z, P, F[1..])+E);
+  }
+}
+ghost method lemma_env_wf_subst_tb(Z: int, P: typ, E: env, F: env)
+  requires env_wf(env_concat3(F, Env([bd_var(Z)]), E));
+  requires typ_wf(E, P);
+  ensures env_wf(env_concat(subst_env(Z, P, F), E));
+{
+  lemma_bds_wf_subst_tb(Z, P, E.bds, F.bds);
+}
+ghost method bds_wf_tail(E: seq<binding>, F: seq<binding>)
+  requires bds_wf(E+F);
+  ensures bds_wf(F);
+{
+  if (E==[]) {
+    assert E+F==F;
+  } else {
+    assert E[1..]+F==(E+F)[1..];
+    bds_wf_tail(E[1..], F);
+  }
+}
+ghost method env_wf_tail(E: env, F: env)
+  requires env_wf(env_concat(E,F));
+  ensures env_wf(F);
+{
+  bds_wf_tail(E.bds, F.bds);
 }
 
 ghost method {:induction T, k} lemma_notin_fv_tt_open_rec(Y: int, X: int, T: typ, k: nat)
@@ -1240,7 +1476,14 @@ ghost method env_weakening_lookup(E: env, F: env, G: env, x: int, T: typ)
   lemma_env_uniq_from_wf(env_concat3(G, F, E));
   bds_weakening_lookup(E.bds, F.bds, G.bds, x, T);
 }
-
+ghost method env_weakening_lookup'(E: env, F: env, G: env, x: int, T: typ)
+  requires env_lookup(x, env_concat(G, E)) == Some(T);
+  requires env_uniq(env_concat(G, E));
+  requires env_uniq(env_concat3(G, F, E));
+  ensures env_lookup(x, env_concat3(G, F, E)) == Some(T);
+{
+  bds_weakening_lookup(E.bds, F.bds, G.bds, x, T);
+}
 ghost method lemma_typing_weakening(E: env, F: env, G: env, e: exp, T: typ)
   requires typing(env_concat(G, E), e, T);
   requires env_wf(env_concat3(G, F, E));
@@ -1350,5 +1593,55 @@ ghost method lemma_typing_through_subst_ee(U: typ, E: env, F: env, x: int, T: ty
     var T1 :| typing(H', e1, T1) && T1.typ_all? && typ_wf(H', T2) && open_tt(T1.ty0, T2)==T;
     lemma_typing_through_subst_ee(U, E, F, x, T1, e1, u);
     lemma_wf_typ_strengthening(E, F, x, U, T2); 
+  }
+}
+
+ghost method lemma_typing_through_subst_te(E: env, F: env, Z: int, e: exp, T: typ, P: typ)
+  requires typing(env_concat3(F, Env([bd_var(Z)]), E), e, T);
+  requires typ_wf(E, P);
+  ensures typing(env_concat(subst_env(Z, P, F), E), subst_te(Z, P, e), subst_tt(Z, P, T));
+  decreases exp_size(e);
+{
+  var H := env_concat3(F, Env([bd_var(Z)]), E);
+  var F' := subst_env(Z, P, F);
+  var H' := env_concat(F', E);
+  lemma_typing_regular(env_concat3(F, Env([bd_var(Z)]), E), e, T);
+  lemma_env_uniq_from_wf(H);
+  env_uniq_weaken(F, Env([bd_var(Z)]), E);
+  env_uniq_subst_part(Z, P, F, E);
+  env_uniq_concat(F, E);
+  env_uniq_concat(subst_env(Z, P, F), E);
+  env_wf_tail(env_concat(F, Env([bd_var(Z)])), E);
+  env_concat3_concat2(F, Env([bd_var(Z)]), E);
+  env_wf_tail(F, env_concat(Env([bd_var(Z)]), E));
+  match e {
+  case exp_bvar(i) =>
+  case exp_fvar(a) =>
+    lemma_env_wf_subst_tb(Z, P, E, F);
+    assert env_lookup(a, H) == Some(T);
+    assert bd_typ(a, T) in H.bds;
+    assert bd_typ(a, T) in F.bds || bd_typ(a, T) in E.bds;
+    if (bd_typ(a, T) in F.bds) {
+      env_lookup_in(a, T, F);
+      env_lookup_in(a, subst_tt(Z, P, T), F');
+      env_concat_empty'(F');
+      env_concat3_empty'(F', E);
+      env_weakening_lookup'(Env([]), E, F', a, subst_tt(Z, P, T));
+    } else {
+      env_lookup_in(a, T, E);
+      lemma_typ_wf_from_binds(a, T, E);
+      lemma_notin_fv_wf(E, Z, T);
+      lemma_subst_tt_fresh(Z, P, T);
+      assert subst_tt(Z, P, T)==T;
+      env_concat_empty(E);
+      env_concat3_empty(F', E);
+      env_weakening_lookup(E, F', Env([]), a, T);
+    }
+  case exp_abs(V, e1) => //T.typ_arrow? &&
+    //T.ty1==V && (exists L:set<int> :: forall x :: x !in L ==> typing(env_extend(x, V, E), open_ee(e1, exp_fvar(x)), T.ty2))
+  case exp_app(e1, e2) => //exists T1 :: typing(E, e1, typ_arrow(T1, T)) && typing(E, e2, T1)
+  case exp_tabs(e1) => //T.typ_all? &&
+    //(exists L:set<int> :: forall X :: X !in L ==> typing(env_plus_var(X, E), open_te(e1, typ_fvar(X)), open_tt(T.ty0, typ_fvar(X))))
+  case exp_tapp(e1, T2) => //exists T1 :: typing(E, e1, T1) && T1.typ_all? && typ_wf(E, T2) && open_tt(T1.ty0, T2)==T
   }
 }
