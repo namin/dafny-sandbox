@@ -1,3 +1,5 @@
+/// Utilities
+
 datatype option<A> = None | Some(get: A);
 function chain(a: option, b: option): option
   ensures a.None? ==> chain(a, b)==b;
@@ -8,21 +10,19 @@ function chain(a: option, b: option): option
   if (a.None?) then b else a
 }
 
-datatype pair<A,B> = P(fst: A, snd: B);
-
-function not_in(s: set<int>, r: nat, sr: set<int>, so: set<int>): nat
-  requires forall x :: x in sr ==> x<=r;
-  requires s+sr==so;
-  ensures not_in(s, r, sr, so) !in so;
-{
-  if (!exists x :: x in s) then r+1 else
-  var x :| x in s;
-  if (x<r) then not_in(s-{x}, r, sr+{x}, so) else not_in(s-{x}, x, sr+{x}, so)
-}
 function notin(s: set<int>): int
   ensures notin(s) !in s;
 {
-  not_in(s, 0, {}, s)
+  notin_rec(s, 0, {}, s)
+}
+function notin_rec(s: set<int>, r: nat, sr: set<int>, so: set<int>): nat
+  requires forall x :: x in sr ==> x<=r;
+  requires s+sr==so;
+  ensures notin_rec(s, r, sr, so) !in so;
+{
+  if (!exists x :: x in s) then r+1 else
+  var x :| x in s;
+  if (x<r) then notin_rec(s-{x}, r, sr+{x}, so) else notin_rec(s-{x}, x, sr+{x}, so)
 }
 
 /// Definition of System F
@@ -172,43 +172,6 @@ function bd_lookup(y: int, bd: binding): option<typ>
   case bd_typ(x, T) => if x==y then Some(T) else None
   case bd_var(X) => None
 }
-ghost method bds_lookup_in(x: int, T: typ, bds: seq<binding>)
-  requires bds_uniq(bds);
-  requires bd_typ(x, T) in bds;
-  ensures bds_lookup(x, bds) == Some(T);
-{
-  if (|bds|==0) {}
-  else {
-    if (bd_lookup(x, bds[0]).Some?) {
-      bds_lookup_notin_dom(x, bds[1..]);
-    } else {
-    }
-  }
-}
-ghost method bds_lookup_notin_dom(y: int, bds: seq<binding>)
-  requires y !in bds_dom(bds);
-  ensures forall T :: bd_typ(y, T) !in bds;
-{
-  forall (T: typ)
-  ensures bd_typ(y, T) !in bds;
-  {
-    if (|bds|==0) {
-    } else {
-      if (bds[0].bd_typ? && bds[0].x==y) {
-        assert false;
-      } else {
-        bds_lookup_notin_dom(y, bds[1..]);
-      }
-    }
-  }
-}
-ghost method env_lookup_in(x: int, T: typ, E: env)
-  requires env_uniq(E);
-  requires bd_typ(x, T) in E.bds;
-  ensures env_lookup(x, E) == Some(T);
-{
-  bds_lookup_in(x, T, E.bds);
-}
 function env_concat(E1: env, E2: env): env
 {
   Env(E1.bds+E2.bds)
@@ -217,198 +180,7 @@ function env_concat3(E1: env, E2: env, E3: env): env
 {
   Env(E1.bds+E2.bds+E3.bds)
 }
-ghost method env_plus_concat(X: int, E1: env, E2: env)
-  ensures env_concat(env_plus_var(X, E1), E2)==env_plus_var(X, env_concat(E1, E2));
-{
-  assert env_concat(env_plus_var(X, E1), E2)==Env([bd_var(X)]+E1.bds+E2.bds);
-  assert env_plus_var(X, env_concat(E1, E2))==Env([bd_var(X)]+Env(E1.bds+E2.bds).bds);
-  assert Env(E1.bds+E2.bds).bds == E1.bds+E2.bds;
-  assert [bd_var(X)]+(E1.bds+E2.bds)==[bd_var(X)]+E1.bds+E2.bds;
-}
-ghost method env_extend_concat(x: int, T: typ, E1: env, E2: env)
-  ensures env_concat(env_extend(x, T, E1), E2)==env_extend(x, T, env_concat(E1, E2));
-{
-  assert env_concat(env_extend(x, T, E1), E2)==Env([bd_typ(x, T)]+E1.bds+E2.bds);
-  assert env_extend(x, T, env_concat(E1, E2))==Env([bd_typ(x, T)]+Env(E1.bds+E2.bds).bds);
-  assert Env(E1.bds+E2.bds).bds == E1.bds+E2.bds;
-  assert [bd_typ(x, T)]+(E1.bds+E2.bds)==[bd_typ(x, T)]+E1.bds+E2.bds;
-}
-ghost method env_plus_concat3(X: int, E1: env, E2: env, E3: env)
-  ensures env_concat3(env_plus_var(X, E1), E2, E3)==env_plus_var(X, env_concat3(E1, E2, E3));
-{
-  assert env_concat3(env_plus_var(X, E1), E2, E3)==Env([bd_var(X)]+E1.bds+E2.bds+E3.bds);
-  assert env_plus_var(X, env_concat3(E1, E2, E3))==Env([bd_var(X)]+Env(E1.bds+E2.bds+E3.bds).bds);
-  assert Env(E1.bds+E2.bds+E3.bds).bds == E1.bds+E2.bds+E3.bds;
-  assert [bd_var(X)]+(E1.bds+E2.bds+E3.bds)==[bd_var(X)]+E1.bds+E2.bds+E3.bds;
-}
-ghost method env_extend_concat3(x: int, T: typ, E1: env, E2: env, E3: env)
-  ensures env_concat3(env_extend(x, T, E1), E2, E3)==env_extend(x, T, env_concat3(E1, E2, E3));
-{
-  assert env_concat3(env_extend(x, T, E1), E2, E3)==Env([bd_typ(x, T)]+E1.bds+E2.bds+E3.bds);
-  assert env_extend(x, T, env_concat3(E1, E2, E3))==Env([bd_typ(x, T)]+Env(E1.bds+E2.bds+E3.bds).bds);
-  assert Env(E1.bds+E2.bds+E3.bds).bds == E1.bds+E2.bds+E3.bds;
-  assert [bd_typ(x, T)]+(E1.bds+E2.bds+E3.bds)==[bd_typ(x, T)]+E1.bds+E2.bds+E3.bds;
-}
 
-ghost method env_concat_empty(E: env)
-  ensures env_concat(Env([]), E)==E;
-{
-  assert env_concat(Env([]), E)==Env(Env([]).bds+E.bds);
-  assert Env([]).bds==[];
-  assert []+E.bds==E.bds;
-}
-ghost method env_concat_empty'(E: env)
-  ensures env_concat(E, Env([]))==E;
-{
-  assert env_concat(E, Env([]))==Env(E.bds+Env([]).bds);
-  assert Env([]).bds==[];
-  assert E.bds+[]==E.bds;
-}
-ghost method env_concat3_empty(E1: env, E2: env)
-  ensures env_concat3(Env([]), E1, E2)==env_concat(E1, E2);
-{
-  assert env_concat3(Env([]), E1, E2)==Env(Env([]).bds+E1.bds+E2.bds);
-  assert Env([]).bds==[];
-  assert []+E1.bds+E2.bds==E1.bds+E2.bds;
-}
-ghost method env_concat3_empty'(E1: env, E2: env)
-  ensures env_concat3(E1, E2, Env([]))==env_concat(E1, E2);
-{
-  assert env_concat3(E1, E2, Env([]))==Env(E1.bds+E2.bds+Env([]).bds);
-  assert Env([]).bds==[];
-  assert E1.bds+E2.bds+[]==E1.bds+E2.bds;
-}
-ghost method env_plus_uniq(X: int, E: env)
-  requires X !in env_dom(E);
-  requires env_uniq(E);
-  ensures env_uniq(env_plus_var(X, E));
-{
-}
-ghost method env_extend_uniq(x: int, T: typ, E: env)
-  requires x !in env_dom(E);
-  requires env_uniq(E);
-  ensures env_uniq(env_extend(x, T, E));
-{
-}
-ghost method bds_notin_dom_drop(i: nat, x: int, bds: seq<binding>)
-  requires x !in bds_dom(bds);
-  requires i<=|bds|;
-  ensures x !in bds_dom(bds[i..]);
-  decreases i;
-{
-  if (i==0) {
-    assert bds[0..]==bds;
-  } else {
-    bds_notin_dom_drop(i-1, x, bds[1..]);
-    assert bds[i..]==bds[1..][i-1..];
-  }
-}
-ghost method bds_notin_dom_take(j: nat, x: int, bds: seq<binding>)
-  requires x !in bds_dom(bds);
-  requires j<=|bds|;
-  ensures x !in bds_dom(bds[..j]);
-  decreases j;
-{
-  if (j==0) {
-    assert bds[..j]==[];
-  } else {
-    bds_notin_dom_take(j-1, x, bds[1..]);
-    assert bds[..j]==[bds[0]]+bds[1..][..j-1];
-  }
-}
-ghost method bds_notin_dom_slice(i: nat, j: nat, x: int, bds: seq<binding>)
-  requires x !in bds_dom(bds);
-  requires 0<=i<=j<=|bds|;
-  ensures x !in bds_dom(bds[i..j]);
-{
-  bds_notin_dom_take(j, x, bds);
-  bds_notin_dom_drop(i, x, bds[..j]);
-}
-ghost method bds_dom_split(x: int, E: seq<binding>, F: seq<binding>)
-  requires x !in bds_dom(E+F);
-  ensures x !in bds_dom(E);
-  ensures x !in bds_dom(F);
-{
-  assert (E+F)[0..|E|]==E;
-  assert (E+F)[|E|..|E+F|]==F;
-  bds_notin_dom_slice(0, |E|, x, E+F);
-  bds_notin_dom_slice(|E|, |E+F|, x, E+F);
-}
-ghost method bds_uniq_one(i: nat, bds: seq<binding>)
-  requires bds_uniq(bds);
-  requires i<|bds|;
-  ensures bd_uniq(bds[i], bds_dom(bds[i+1..]));
-{
-  if (i==0) {
-    assert bds[0+1..]==bds[1..];
-  } else {
-    bds_uniq_one(i-1, bds[1..]);
-    assert bds[1..][i-1+1..]==bds[i+1..];
-  }
-}
-ghost method bds_uniq_weaken1(E: seq<binding>, bd: binding, G: seq<binding>)
-  requires bds_uniq(E+[bd]+G);
-  ensures bds_uniq(E+G);
-{
-  if (E==[]) {
-    assert []+G==G;
-  } else {
-    assert (E+[bd]+G)[1..]==E[1..]+[bd]+G;
-    bds_uniq_weaken1(E[1..], bd, G);
-    assert bd_uniq(E[0], bds_dom(E[1..]+[bd]+G));
-    var x := if (E[0].bd_typ?) then E[0].x else E[0].X;
-    assert x !in bds_dom(E[1..]+[bd]+G);
-    bds_dom_split(x, E[1..]+[bd], G);
-    bds_dom_split(x, E[1..], [bd]);
-    assert x !in bds_dom(E[1..])+bds_dom(G);
-    bds_concat_dom(E[1..], G);
-    assert bd_uniq(E[0], bds_dom(E[1..]+G));
-    assert [E[0]]+E[1..]+G==E+G;
-    assert (E+G)[0]==E[0];
-    assert (E+G)[1..]==E[1..]+G;
-  }
-}
-ghost method bds_uniq_weaken(E: seq<binding>, F: seq<binding>, G: seq<binding>)
-  requires bds_uniq(E+F+G);
-  ensures bds_uniq(E+G);
-  decreases F;
-{
-  if (F==[]) {
-    assert E+F+G==E+G;
-  } else {
-    assert E+[F[0]]+F[1..]+G==E+F+G;
-    bds_uniq_weaken(E+[F[0]], F[1..], G);
-    bds_uniq_weaken1(E, F[0], G);
-  }
-}
-ghost method env_uniq_weaken(E: env, F: env, G: env)
-  requires env_uniq(env_concat3(E,F,G));
-  ensures env_uniq(env_concat(E,G));
-{
-  bds_uniq_weaken(E.bds, F.bds, G.bds);
-}
-ghost method bds_uniq_concat(E: seq<binding>, F: seq<binding>)
-  requires bds_uniq(E+F);
-  ensures bds_uniq(E);
-  ensures bds_uniq(F);
-{
-  if (E==[]) {
-    assert []+F==F;
-  } else {
-    assert E[1..]+F==(E+F)[1..];
-    assert E[0]==(E+F)[0];
-    bds_uniq_concat(E[1..], F);
-    assert bd_uniq(E[0], bds_dom(E[1..]+F));
-    bds_dom_split(var_name(E[0]), E[1..], F);
-  }
-}
-ghost method env_uniq_concat(E: env, F: env)
-  requires env_uniq(env_concat(E,F));
-  ensures env_uniq(E);
-  ensures env_uniq(F);
-{
-  bds_uniq_concat(E.bds, F.bds);
-}
 predicate typ_wf(E: env, T: typ)
   decreases typ_size(T);
 {
@@ -436,44 +208,6 @@ function env_dom(E: env): set<int>
 {
   bds_dom(E.bds)
 }
-ghost method bds_concat_dom(bds1: seq<binding>, bds2: seq<binding>)
-  ensures bds_dom(bds1+bds2)==bds_dom(bds1)+bds_dom(bds2);
-{
-  if (|bds1|==0) {
-    assert bds_dom(bds1)=={};
-    assert bds1+bds2==bds2;
-  } else {
-    bds_concat_dom(bds1[1..], bds2);
-    assert bds_dom(bds1[1..]+bds2)==bds_dom(bds1[1..])+bds_dom(bds2);
-    assert [bds1[0]]+bds1[1..]==bds1;
-    assert bd_dom(bds1[0])+bds_dom(bds1[1..])==bds_dom(bds1);
-    assert bds1[1..]+bds2 == (bds1+bds2)[1..];
-  }  
-}
-ghost method env_concat_dom(E1: env, E2: env)
-  ensures env_dom(env_concat(E1, E2))==env_dom(E1)+env_dom(E2);
-{
-  bds_concat_dom(E1.bds, E2.bds);
-}
-ghost method bds_concat3_dom(bds1: seq<binding>, bds2: seq<binding>, bds3: seq<binding>)
-  ensures bds_dom(bds1+bds2+bds3)==bds_dom(bds1)+bds_dom(bds2)+bds_dom(bds3);
-{
-  assert bds1+bds2+bds3==bds1+(bds2+bds3);
-  bds_concat_dom(bds1, bds2+bds3);
-  bds_concat_dom(bds2, bds3);
-}
-ghost method env_concat3_concat2(E1: env, E2: env, E3: env)
-  ensures env_concat3(E1, E2, E3)==env_concat(E1, env_concat(E2, E3));
-{
-  assert env_concat3(E1, E2, E3).bds==E1.bds+E2.bds+E3.bds;
-  assert env_concat(E2, E3).bds==E2.bds+E3.bds;
-  assert env_concat(E1, env_concat(E2, E3)).bds==E1.bds+E2.bds+E3.bds;
-}
-ghost method env_concat3_dom(E1: env, E2: env, E3: env)
-  ensures env_dom(env_concat3(E1, E2, E3))==env_dom(E1)+env_dom(E2)+env_dom(E3);
-{
-  bds_concat3_dom(E1.bds, E2.bds, E3.bds);
-}
 predicate bds_wf(bds: seq<binding>)
   ensures bds_wf(bds) ==> bds_uniq(bds);
   decreases bds, 0;
@@ -496,13 +230,6 @@ predicate env_wf(E: env)
   ensures env_wf(E) ==> env_uniq(E);
 {
   bds_wf(E.bds)
-}
-ghost method env_wf_extend(x: int, T: typ, E: env)
-  requires env_wf(E);
-  requires x !in env_dom(E);
-  requires typ_wf(E, T);
-  ensures env_wf(env_extend(x, T, E));
-{
 }
 predicate bds_uniq(bds: seq<binding>)
   ensures (bds_uniq(bds) && |bds|>0) ==> bd_uniq(bds[0], bds_dom(bds[1..]));
@@ -1005,16 +732,6 @@ ghost method lemma_open_ee_body_e(e1: exp, e2: exp)
   lemma_subst_ee_expr(x, open_ee(e1, exp_fvar(x)), e2);
 }
 
-ghost method auto_infrastructure()
-  ensures  forall Z, P, T :: (typ_lc(T) && typ_lc(P)) ==> typ_lc(subst_tt(Z, P, T));
-{
-  forall (Z, P, T | typ_lc(T) && typ_lc(P))
-  ensures typ_lc(subst_tt(Z, P, T));
-  {
-    lemma_subst_tt_type(Z, P, T);
-  }
-}
-
 /// Lemmas
 /// https://github.com/plclub/metalib/blob/master/Fsub_LetSum_Lemmas.v
 
@@ -1098,63 +815,6 @@ function subst_env(Z: int, P: typ, E: env): env
 {
   Env(subst_bds(Z, P, E.bds))
 }
-ghost method {:timeLimit 20} bds_uniq_subst_part(Z: int, P: typ, bds1: seq<binding>, bds2: seq<binding>)
-  requires bds_uniq(bds1+bds2);
-  ensures bds_uniq(subst_bds(Z, P, bds1)+bds2);
-{
-  if (bds1==[]) {
-  } else {
-    assert (bds1+bds2)[1..]==bds1[1..]+bds2;
-    bds_uniq_subst_part(Z, P, bds1[1..], bds2);
-    assert bds1[0]==(bds1+bds2)[0];
-    assert [subst_bd(Z, P, bds1[0])]+subst_bds(Z, P, bds1[1..])==subst_bds(Z, P, bds1);
-    assert [subst_bd(Z, P, bds1[0])]+subst_bds(Z, P, bds1[1..])+bds2==subst_bds(Z, P, bds1)+bds2;
-    assert ([subst_bd(Z, P, bds1[0])]+subst_bds(Z, P, bds1[1..])+bds2)[1..]==(subst_bds(Z, P, bds1)+bds2)[1..];
-    assert subst_bds(Z, P, bds1[1..])+bds2==(subst_bds(Z, P, bds1)+bds2)[1..];
-    assert bd_uniq(bds1[0], bds_dom((bds1+bds2)[1..]));
-    assert bd_uniq(subst_bd(Z, P, bds1[0]), bds_dom((bds1+bds2)[1..]));
-    bds_concat_dom(bds1[1..], bds2);
-    assert bds_dom(bds1[1..])+bds_dom(bds2)==bds_dom(subst_bds(Z, P, bds1[1..]))+bds_dom(bds2);
-    bds_concat_dom(subst_bds(Z, P, bds1[1..]), bds2);
-    assert bd_uniq(subst_bd(Z, P, bds1[0]), bds_dom(subst_bds(Z, P, bds1[1..])+bds2));
-  }
-}
-ghost method env_uniq_subst_part(Z: int, P: typ, E: env, F: env)
-  requires env_uniq(env_concat(E,F));
-  ensures env_uniq(env_concat(subst_env(Z, P, E), F));
-{
-  bds_uniq_subst_part(Z, P, E.bds, F.bds);
-}
-ghost method bds_uniq_subst(Z: int, P: typ, bds: seq<binding>)
-  requires bds_uniq(bds);
-  ensures bds_uniq(subst_bds(Z, P, bds));
-{
-}
-ghost method env_uniq_subst(Z: int, P: typ, E: env)
-  requires env_uniq(E);
-  ensures env_uniq(subst_env(Z, P, E));
-{
-  bds_uniq_subst(Z, P, E.bds);
-}
-ghost method bds_subst_uniq(Z: int, P: typ, bds: seq<binding>)
-  requires bds_uniq(subst_bds(Z, P, bds));
-  ensures bds_uniq(bds);
-{
-  var sbds := subst_bds(Z, P, bds);
-  if (|sbds|==0) {
-  } else {
-    var sbds' := sbds[1..];
-    var bds' := bds[1..];
-    bds_subst_uniq(Z, P, bds');
-    assert bds_dom(sbds')==bds_dom(bds');
-  }
-}
-ghost method env_subst_uniq(Z: int, P: typ, E: env)
-  requires env_uniq(subst_env(Z, P, E));
-  ensures env_uniq(E);
-{
-  bds_subst_uniq(Z, P, E.bds);
-}
 
 ghost method lemma_wf_typ_subst_tb(F: env, E: env, Z: int, P: typ, T: typ)
   requires typ_wf(env_concat3(F, Env([bd_var(Z)]), E), T);
@@ -1206,13 +866,6 @@ ghost method lemma_env_uniq_from_wf(E: env)
 {
 }
 
-ghost method env_concat_split(E: env)
-  requires |E.bds|>0;
-  ensures env_concat(Env([E.bds[0]]), Env(E.bds[1..]))==E;
-{
-  assert [E.bds[0]]+E.bds[1..]==E.bds;
-}
-
 ghost method lemma_typ_wf_from_binds(x: int, U: typ, E: env)
   requires env_wf(E);
   requires env_lookup(x, E) == Some(U);
@@ -1235,19 +888,6 @@ ghost method lemma_wf_typ_from_wf_env_typ(x: int, T: typ, E: env)
   requires env_wf(env_extend(x, T, E));
   ensures typ_wf(E, T);
 {
-}
-
-ghost method env_concat3_split(E1: env, E2: env, E3: env)
-  requires |E1.bds|>0;
-  ensures env_concat(Env([E1.bds[0]]), env_concat3(Env(E1.bds[1..]), E2, E3))==env_concat3(E1, E2, E3);
-{
-  assert env_concat(Env([E1.bds[0]]), env_concat3(Env(E1.bds[1..]), E2, E3)).bds==E1.bds+E2.bds+E3.bds;
-}
-ghost method env_concat2_split(E1: env, E2: env)
-  requires |E1.bds|>0;
-  ensures env_concat(Env([E1.bds[0]]), env_concat(Env(E1.bds[1..]), E2))==env_concat(E1, E2);
-{
-  assert env_concat(Env([E1.bds[0]]), env_concat(Env(E1.bds[1..]), E2)).bds==E1.bds+E2.bds;
 }
 
 ghost method lemma_env_wf_strengthening(x: int, T: typ, E: env, F: env)
@@ -1308,23 +948,6 @@ ghost method lemma_env_wf_subst_tb(Z: int, P: typ, E: env, F: env)
   ensures env_wf(env_concat(subst_env(Z, P, F), E));
 {
   lemma_bds_wf_subst_tb(Z, P, E.bds, F.bds);
-}
-ghost method bds_wf_tail(E: seq<binding>, F: seq<binding>)
-  requires bds_wf(E+F);
-  ensures bds_wf(F);
-{
-  if (E==[]) {
-    assert E+F==F;
-  } else {
-    assert E[1..]+F==(E+F)[1..];
-    bds_wf_tail(E[1..], F);
-  }
-}
-ghost method env_wf_tail(E: env, F: env)
-  requires env_wf(env_concat(E,F));
-  ensures env_wf(F);
-{
-  bds_wf_tail(E.bds, F.bds);
 }
 
 ghost method {:induction T, k} lemma_notin_fv_tt_open_rec(Y: int, X: int, T: typ, k: nat)
@@ -1434,7 +1057,7 @@ ghost method lemma_value_regular(e: exp)
 {
 }
 
-ghost method {:induction e, e'} red_regular(e: exp, e': exp)
+ghost method {:induction e, e'} lemma_red_regular(e: exp, e': exp)
   requires red(e) == Some(e');
   ensures exp_lc(e);
   ensures exp_lc(e');
@@ -1458,35 +1081,6 @@ ghost method {:induction e, e'} red_regular(e: exp, e': exp)
 /// Soundness
 /// https://github.com/plclub/metalib/blob/master/Fsub_LetSum_Soundness.v
 
-ghost method bds_weakening_lookup(E: seq<binding>, F: seq<binding>, G: seq<binding>, x: int, T: typ)
-  requires bds_lookup(x,G+E) == Some(T);
-  requires bds_uniq(G+E);
-  requires bds_uniq(G+F+E);
-  ensures bds_lookup(x, G+F+E) == Some(T);
-{
-  assert bd_typ(x, T) in G+E;
-  assert bd_typ(x, T) in G || bd_typ(x, T) in E;
-  assert bd_typ(x, T) in G+F+E;
-  bds_lookup_in(x, T, G+F+E);
-}
-ghost method env_weakening_lookup(E: env, F: env, G: env, x: int, T: typ)
-  requires env_lookup(x, env_concat(G, E)) == Some(T);
-  requires env_wf(env_concat(G, E));
-  requires env_wf(env_concat3(G, F, E));
-  ensures env_lookup(x, env_concat3(G, F, E)) == Some(T);
-{
-  lemma_env_uniq_from_wf(env_concat(G, E));
-  lemma_env_uniq_from_wf(env_concat3(G, F, E));
-  bds_weakening_lookup(E.bds, F.bds, G.bds, x, T);
-}
-ghost method env_weakening_lookup'(E: env, F: env, G: env, x: int, T: typ)
-  requires env_lookup(x, env_concat(G, E)) == Some(T);
-  requires env_uniq(env_concat(G, E));
-  requires env_uniq(env_concat3(G, F, E));
-  ensures env_lookup(x, env_concat3(G, F, E)) == Some(T);
-{
-  bds_weakening_lookup(E.bds, F.bds, G.bds, x, T);
-}
 ghost method lemma_typing_weakening(E: env, F: env, G: env, e: exp, T: typ)
   requires typing(env_concat(G, E), e, T);
   requires env_wf(env_concat3(G, F, E));
@@ -1742,4 +1336,401 @@ ghost method {:induction e, T} lemma_progress(e: exp, T: typ)
   ensures value(e) || red(e).Some?;
 {
   lemma_typing_regular(Env([]), e, T);
+}
+
+/// Extra boring stuff
+ghost method env_plus_concat(X: int, E1: env, E2: env)
+  ensures env_concat(env_plus_var(X, E1), E2)==env_plus_var(X, env_concat(E1, E2));
+{
+  assert env_concat(env_plus_var(X, E1), E2)==Env([bd_var(X)]+E1.bds+E2.bds);
+  assert env_plus_var(X, env_concat(E1, E2))==Env([bd_var(X)]+Env(E1.bds+E2.bds).bds);
+  assert Env(E1.bds+E2.bds).bds == E1.bds+E2.bds;
+  assert [bd_var(X)]+(E1.bds+E2.bds)==[bd_var(X)]+E1.bds+E2.bds;
+}
+ghost method env_extend_concat(x: int, T: typ, E1: env, E2: env)
+  ensures env_concat(env_extend(x, T, E1), E2)==env_extend(x, T, env_concat(E1, E2));
+{
+  assert env_concat(env_extend(x, T, E1), E2)==Env([bd_typ(x, T)]+E1.bds+E2.bds);
+  assert env_extend(x, T, env_concat(E1, E2))==Env([bd_typ(x, T)]+Env(E1.bds+E2.bds).bds);
+  assert Env(E1.bds+E2.bds).bds == E1.bds+E2.bds;
+  assert [bd_typ(x, T)]+(E1.bds+E2.bds)==[bd_typ(x, T)]+E1.bds+E2.bds;
+}
+ghost method env_plus_concat3(X: int, E1: env, E2: env, E3: env)
+  ensures env_concat3(env_plus_var(X, E1), E2, E3)==env_plus_var(X, env_concat3(E1, E2, E3));
+{
+  assert env_concat3(env_plus_var(X, E1), E2, E3)==Env([bd_var(X)]+E1.bds+E2.bds+E3.bds);
+  assert env_plus_var(X, env_concat3(E1, E2, E3))==Env([bd_var(X)]+Env(E1.bds+E2.bds+E3.bds).bds);
+  assert Env(E1.bds+E2.bds+E3.bds).bds == E1.bds+E2.bds+E3.bds;
+  assert [bd_var(X)]+(E1.bds+E2.bds+E3.bds)==[bd_var(X)]+E1.bds+E2.bds+E3.bds;
+}
+ghost method env_extend_concat3(x: int, T: typ, E1: env, E2: env, E3: env)
+  ensures env_concat3(env_extend(x, T, E1), E2, E3)==env_extend(x, T, env_concat3(E1, E2, E3));
+{
+  assert env_concat3(env_extend(x, T, E1), E2, E3)==Env([bd_typ(x, T)]+E1.bds+E2.bds+E3.bds);
+  assert env_extend(x, T, env_concat3(E1, E2, E3))==Env([bd_typ(x, T)]+Env(E1.bds+E2.bds+E3.bds).bds);
+  assert Env(E1.bds+E2.bds+E3.bds).bds == E1.bds+E2.bds+E3.bds;
+  assert [bd_typ(x, T)]+(E1.bds+E2.bds+E3.bds)==[bd_typ(x, T)]+E1.bds+E2.bds+E3.bds;
+}
+ghost method env_concat_empty(E: env)
+  ensures env_concat(Env([]), E)==E;
+{
+  assert env_concat(Env([]), E)==Env(Env([]).bds+E.bds);
+  assert Env([]).bds==[];
+  assert []+E.bds==E.bds;
+}
+ghost method env_concat_empty'(E: env)
+  ensures env_concat(E, Env([]))==E;
+{
+  assert env_concat(E, Env([]))==Env(E.bds+Env([]).bds);
+  assert Env([]).bds==[];
+  assert E.bds+[]==E.bds;
+}
+ghost method env_concat3_empty(E1: env, E2: env)
+  ensures env_concat3(Env([]), E1, E2)==env_concat(E1, E2);
+{
+  assert env_concat3(Env([]), E1, E2)==Env(Env([]).bds+E1.bds+E2.bds);
+  assert Env([]).bds==[];
+  assert []+E1.bds+E2.bds==E1.bds+E2.bds;
+}
+ghost method env_concat3_empty'(E1: env, E2: env)
+  ensures env_concat3(E1, E2, Env([]))==env_concat(E1, E2);
+{
+  assert env_concat3(E1, E2, Env([]))==Env(E1.bds+E2.bds+Env([]).bds);
+  assert Env([]).bds==[];
+  assert E1.bds+E2.bds+[]==E1.bds+E2.bds;
+}
+ghost method env_plus_uniq(X: int, E: env)
+  requires X !in env_dom(E);
+  requires env_uniq(E);
+  ensures env_uniq(env_plus_var(X, E));
+{
+}
+ghost method env_extend_uniq(x: int, T: typ, E: env)
+  requires x !in env_dom(E);
+  requires env_uniq(E);
+  ensures env_uniq(env_extend(x, T, E));
+{
+}
+ghost method bds_notin_dom_drop(i: nat, x: int, bds: seq<binding>)
+  requires x !in bds_dom(bds);
+  requires i<=|bds|;
+  ensures x !in bds_dom(bds[i..]);
+  decreases i;
+{
+  if (i==0) {
+    assert bds[0..]==bds;
+  } else {
+    bds_notin_dom_drop(i-1, x, bds[1..]);
+    assert bds[i..]==bds[1..][i-1..];
+  }
+}
+ghost method bds_notin_dom_take(j: nat, x: int, bds: seq<binding>)
+  requires x !in bds_dom(bds);
+  requires j<=|bds|;
+  ensures x !in bds_dom(bds[..j]);
+  decreases j;
+{
+  if (j==0) {
+    assert bds[..j]==[];
+  } else {
+    bds_notin_dom_take(j-1, x, bds[1..]);
+    assert bds[..j]==[bds[0]]+bds[1..][..j-1];
+  }
+}
+ghost method bds_notin_dom_slice(i: nat, j: nat, x: int, bds: seq<binding>)
+  requires x !in bds_dom(bds);
+  requires 0<=i<=j<=|bds|;
+  ensures x !in bds_dom(bds[i..j]);
+{
+  bds_notin_dom_take(j, x, bds);
+  bds_notin_dom_drop(i, x, bds[..j]);
+}
+ghost method bds_dom_split(x: int, E: seq<binding>, F: seq<binding>)
+  requires x !in bds_dom(E+F);
+  ensures x !in bds_dom(E);
+  ensures x !in bds_dom(F);
+{
+  assert (E+F)[0..|E|]==E;
+  assert (E+F)[|E|..|E+F|]==F;
+  bds_notin_dom_slice(0, |E|, x, E+F);
+  bds_notin_dom_slice(|E|, |E+F|, x, E+F);
+}
+ghost method bds_uniq_one(i: nat, bds: seq<binding>)
+  requires bds_uniq(bds);
+  requires i<|bds|;
+  ensures bd_uniq(bds[i], bds_dom(bds[i+1..]));
+{
+  if (i==0) {
+    assert bds[0+1..]==bds[1..];
+  } else {
+    bds_uniq_one(i-1, bds[1..]);
+    assert bds[1..][i-1+1..]==bds[i+1..];
+  }
+}
+ghost method bds_uniq_weaken1(E: seq<binding>, bd: binding, G: seq<binding>)
+  requires bds_uniq(E+[bd]+G);
+  ensures bds_uniq(E+G);
+{
+  if (E==[]) {
+    assert []+G==G;
+  } else {
+    assert (E+[bd]+G)[1..]==E[1..]+[bd]+G;
+    bds_uniq_weaken1(E[1..], bd, G);
+    assert bd_uniq(E[0], bds_dom(E[1..]+[bd]+G));
+    var x := if (E[0].bd_typ?) then E[0].x else E[0].X;
+    assert x !in bds_dom(E[1..]+[bd]+G);
+    bds_dom_split(x, E[1..]+[bd], G);
+    bds_dom_split(x, E[1..], [bd]);
+    assert x !in bds_dom(E[1..])+bds_dom(G);
+    bds_concat_dom(E[1..], G);
+    assert bd_uniq(E[0], bds_dom(E[1..]+G));
+    assert [E[0]]+E[1..]+G==E+G;
+    assert (E+G)[0]==E[0];
+    assert (E+G)[1..]==E[1..]+G;
+  }
+}
+ghost method bds_uniq_weaken(E: seq<binding>, F: seq<binding>, G: seq<binding>)
+  requires bds_uniq(E+F+G);
+  ensures bds_uniq(E+G);
+  decreases F;
+{
+  if (F==[]) {
+    assert E+F+G==E+G;
+  } else {
+    assert E+[F[0]]+F[1..]+G==E+F+G;
+    bds_uniq_weaken(E+[F[0]], F[1..], G);
+    bds_uniq_weaken1(E, F[0], G);
+  }
+}
+ghost method env_uniq_weaken(E: env, F: env, G: env)
+  requires env_uniq(env_concat3(E,F,G));
+  ensures env_uniq(env_concat(E,G));
+{
+  bds_uniq_weaken(E.bds, F.bds, G.bds);
+}
+ghost method bds_uniq_concat(E: seq<binding>, F: seq<binding>)
+  requires bds_uniq(E+F);
+  ensures bds_uniq(E);
+  ensures bds_uniq(F);
+{
+  if (E==[]) {
+    assert []+F==F;
+  } else {
+    assert E[1..]+F==(E+F)[1..];
+    assert E[0]==(E+F)[0];
+    bds_uniq_concat(E[1..], F);
+    assert bd_uniq(E[0], bds_dom(E[1..]+F));
+    bds_dom_split(var_name(E[0]), E[1..], F);
+  }
+}
+ghost method env_uniq_concat(E: env, F: env)
+  requires env_uniq(env_concat(E,F));
+  ensures env_uniq(E);
+  ensures env_uniq(F);
+{
+  bds_uniq_concat(E.bds, F.bds);
+}
+ghost method bds_lookup_in(x: int, T: typ, bds: seq<binding>)
+  requires bds_uniq(bds);
+  requires bd_typ(x, T) in bds;
+  ensures bds_lookup(x, bds) == Some(T);
+{
+  if (|bds|==0) {}
+  else {
+    if (bd_lookup(x, bds[0]).Some?) {
+      bds_lookup_notin_dom(x, bds[1..]);
+    } else {
+    }
+  }
+}
+ghost method bds_lookup_notin_dom(y: int, bds: seq<binding>)
+  requires y !in bds_dom(bds);
+  ensures forall T :: bd_typ(y, T) !in bds;
+{
+  forall (T: typ)
+  ensures bd_typ(y, T) !in bds;
+  {
+    if (|bds|==0) {
+    } else {
+      if (bds[0].bd_typ? && bds[0].x==y) {
+        assert false;
+      } else {
+        bds_lookup_notin_dom(y, bds[1..]);
+      }
+    }
+  }
+}
+ghost method env_lookup_in(x: int, T: typ, E: env)
+  requires env_uniq(E);
+  requires bd_typ(x, T) in E.bds;
+  ensures env_lookup(x, E) == Some(T);
+{
+  bds_lookup_in(x, T, E.bds);
+}
+ghost method bds_concat_dom(bds1: seq<binding>, bds2: seq<binding>)
+  ensures bds_dom(bds1+bds2)==bds_dom(bds1)+bds_dom(bds2);
+{
+  if (|bds1|==0) {
+    assert bds_dom(bds1)=={};
+    assert bds1+bds2==bds2;
+  } else {
+    bds_concat_dom(bds1[1..], bds2);
+    assert bds_dom(bds1[1..]+bds2)==bds_dom(bds1[1..])+bds_dom(bds2);
+    assert [bds1[0]]+bds1[1..]==bds1;
+    assert bd_dom(bds1[0])+bds_dom(bds1[1..])==bds_dom(bds1);
+    assert bds1[1..]+bds2 == (bds1+bds2)[1..];
+  }  
+}
+ghost method env_concat_dom(E1: env, E2: env)
+  ensures env_dom(env_concat(E1, E2))==env_dom(E1)+env_dom(E2);
+{
+  bds_concat_dom(E1.bds, E2.bds);
+}
+ghost method bds_concat3_dom(bds1: seq<binding>, bds2: seq<binding>, bds3: seq<binding>)
+  ensures bds_dom(bds1+bds2+bds3)==bds_dom(bds1)+bds_dom(bds2)+bds_dom(bds3);
+{
+  assert bds1+bds2+bds3==bds1+(bds2+bds3);
+  bds_concat_dom(bds1, bds2+bds3);
+  bds_concat_dom(bds2, bds3);
+}
+ghost method env_concat3_concat2(E1: env, E2: env, E3: env)
+  ensures env_concat3(E1, E2, E3)==env_concat(E1, env_concat(E2, E3));
+{
+  assert env_concat3(E1, E2, E3).bds==E1.bds+E2.bds+E3.bds;
+  assert env_concat(E2, E3).bds==E2.bds+E3.bds;
+  assert env_concat(E1, env_concat(E2, E3)).bds==E1.bds+E2.bds+E3.bds;
+}
+ghost method env_concat3_dom(E1: env, E2: env, E3: env)
+  ensures env_dom(env_concat3(E1, E2, E3))==env_dom(E1)+env_dom(E2)+env_dom(E3);
+{
+  bds_concat3_dom(E1.bds, E2.bds, E3.bds);
+}
+ghost method env_wf_extend(x: int, T: typ, E: env)
+  requires env_wf(E);
+  requires x !in env_dom(E);
+  requires typ_wf(E, T);
+  ensures env_wf(env_extend(x, T, E));
+{
+}
+ghost method {:timeLimit 20} bds_uniq_subst_part(Z: int, P: typ, bds1: seq<binding>, bds2: seq<binding>)
+  requires bds_uniq(bds1+bds2);
+  ensures bds_uniq(subst_bds(Z, P, bds1)+bds2);
+{
+  if (bds1==[]) {
+  } else {
+    assert (bds1+bds2)[1..]==bds1[1..]+bds2;
+    bds_uniq_subst_part(Z, P, bds1[1..], bds2);
+    assert bds1[0]==(bds1+bds2)[0];
+    assert [subst_bd(Z, P, bds1[0])]+subst_bds(Z, P, bds1[1..])==subst_bds(Z, P, bds1);
+    assert [subst_bd(Z, P, bds1[0])]+subst_bds(Z, P, bds1[1..])+bds2==subst_bds(Z, P, bds1)+bds2;
+    assert ([subst_bd(Z, P, bds1[0])]+subst_bds(Z, P, bds1[1..])+bds2)[1..]==(subst_bds(Z, P, bds1)+bds2)[1..];
+    assert subst_bds(Z, P, bds1[1..])+bds2==(subst_bds(Z, P, bds1)+bds2)[1..];
+    assert bd_uniq(bds1[0], bds_dom((bds1+bds2)[1..]));
+    assert bd_uniq(subst_bd(Z, P, bds1[0]), bds_dom((bds1+bds2)[1..]));
+    bds_concat_dom(bds1[1..], bds2);
+    assert bds_dom(bds1[1..])+bds_dom(bds2)==bds_dom(subst_bds(Z, P, bds1[1..]))+bds_dom(bds2);
+    bds_concat_dom(subst_bds(Z, P, bds1[1..]), bds2);
+    assert bd_uniq(subst_bd(Z, P, bds1[0]), bds_dom(subst_bds(Z, P, bds1[1..])+bds2));
+  }
+}
+ghost method env_uniq_subst_part(Z: int, P: typ, E: env, F: env)
+  requires env_uniq(env_concat(E,F));
+  ensures env_uniq(env_concat(subst_env(Z, P, E), F));
+{
+  bds_uniq_subst_part(Z, P, E.bds, F.bds);
+}
+ghost method bds_uniq_subst(Z: int, P: typ, bds: seq<binding>)
+  requires bds_uniq(bds);
+  ensures bds_uniq(subst_bds(Z, P, bds));
+{
+}
+ghost method env_uniq_subst(Z: int, P: typ, E: env)
+  requires env_uniq(E);
+  ensures env_uniq(subst_env(Z, P, E));
+{
+  bds_uniq_subst(Z, P, E.bds);
+}
+ghost method bds_subst_uniq(Z: int, P: typ, bds: seq<binding>)
+  requires bds_uniq(subst_bds(Z, P, bds));
+  ensures bds_uniq(bds);
+{
+  var sbds := subst_bds(Z, P, bds);
+  if (|sbds|==0) {
+  } else {
+    var sbds' := sbds[1..];
+    var bds' := bds[1..];
+    bds_subst_uniq(Z, P, bds');
+    assert bds_dom(sbds')==bds_dom(bds');
+  }
+}
+ghost method env_subst_uniq(Z: int, P: typ, E: env)
+  requires env_uniq(subst_env(Z, P, E));
+  ensures env_uniq(E);
+{
+  bds_subst_uniq(Z, P, E.bds);
+}
+
+ghost method env_concat_split(E: env)
+  requires |E.bds|>0;
+  ensures env_concat(Env([E.bds[0]]), Env(E.bds[1..]))==E;
+{
+  assert [E.bds[0]]+E.bds[1..]==E.bds;
+}
+ghost method env_concat3_split(E1: env, E2: env, E3: env)
+  requires |E1.bds|>0;
+  ensures env_concat(Env([E1.bds[0]]), env_concat3(Env(E1.bds[1..]), E2, E3))==env_concat3(E1, E2, E3);
+{
+  assert env_concat(Env([E1.bds[0]]), env_concat3(Env(E1.bds[1..]), E2, E3)).bds==E1.bds+E2.bds+E3.bds;
+}
+ghost method env_concat2_split(E1: env, E2: env)
+  requires |E1.bds|>0;
+  ensures env_concat(Env([E1.bds[0]]), env_concat(Env(E1.bds[1..]), E2))==env_concat(E1, E2);
+{
+  assert env_concat(Env([E1.bds[0]]), env_concat(Env(E1.bds[1..]), E2)).bds==E1.bds+E2.bds;
+}
+ghost method bds_wf_tail(E: seq<binding>, F: seq<binding>)
+  requires bds_wf(E+F);
+  ensures bds_wf(F);
+{
+  if (E==[]) {
+    assert E+F==F;
+  } else {
+    assert E[1..]+F==(E+F)[1..];
+    bds_wf_tail(E[1..], F);
+  }
+}
+ghost method env_wf_tail(E: env, F: env)
+  requires env_wf(env_concat(E,F));
+  ensures env_wf(F);
+{
+  bds_wf_tail(E.bds, F.bds);
+}
+ghost method bds_weakening_lookup(E: seq<binding>, F: seq<binding>, G: seq<binding>, x: int, T: typ)
+  requires bds_lookup(x,G+E) == Some(T);
+  requires bds_uniq(G+E);
+  requires bds_uniq(G+F+E);
+  ensures bds_lookup(x, G+F+E) == Some(T);
+{
+  assert bd_typ(x, T) in G+E;
+  assert bd_typ(x, T) in G || bd_typ(x, T) in E;
+  assert bd_typ(x, T) in G+F+E;
+  bds_lookup_in(x, T, G+F+E);
+}
+ghost method env_weakening_lookup(E: env, F: env, G: env, x: int, T: typ)
+  requires env_lookup(x, env_concat(G, E)) == Some(T);
+  requires env_wf(env_concat(G, E));
+  requires env_wf(env_concat3(G, F, E));
+  ensures env_lookup(x, env_concat3(G, F, E)) == Some(T);
+{
+  lemma_env_uniq_from_wf(env_concat(G, E));
+  lemma_env_uniq_from_wf(env_concat3(G, F, E));
+  bds_weakening_lookup(E.bds, F.bds, G.bds, x, T);
+}
+ghost method env_weakening_lookup'(E: env, F: env, G: env, x: int, T: typ)
+  requires env_lookup(x, env_concat(G, E)) == Some(T);
+  requires env_uniq(env_concat(G, E));
+  requires env_uniq(env_concat3(G, F, E));
+  ensures env_lookup(x, env_concat3(G, F, E)) == Some(T);
+{
+  bds_weakening_lookup(E.bds, F.bds, G.bds, x, T);
 }
