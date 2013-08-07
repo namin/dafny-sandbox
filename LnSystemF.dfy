@@ -1674,3 +1674,51 @@ ghost method {:timeLimit 20} lemma_typing_through_subst_te(E: env, F: env, Z: in
     lemma_subst_tt_open_tt(T1.ty0, T2, Z, P);
   }
 }
+
+ghost method lemma_typing_inv_abs(E: env, T1: typ, e1: exp, T: typ)
+  requires typing(E, exp_abs(T1, e1), T);
+  ensures T.typ_arrow?;
+  ensures exists L:set<int> :: forall x :: x !in L ==>
+     typing(env_extend(x, T1, E), open_ee(e1, exp_fvar(x)), T.ty2);
+{
+}
+
+ghost method lemma_typing_inv_tabs(E: env, e1: exp, T: typ)
+  requires typing(E, exp_tabs(e1), T);
+  ensures T.typ_all?;
+  ensures exists L:set<int> :: forall X :: X !in L ==>
+     typing(env_plus_var(X, E), open_te(e1, typ_fvar(X)), open_tt(T.ty0, typ_fvar(X)));
+{
+}
+
+ghost method {:induction E, e, e', T} lemma_preservation(E: env, e: exp, e': exp, T: typ)
+  requires typing(E, e, T);
+  requires red(e) == Some(e');
+  ensures typing(E, e', T);
+{
+  env_concat_empty(E);
+  if (e.exp_app?) {
+    var T1 :| typing(E, e.f, typ_arrow(T1, T)) && typing(E, e.arg, T1);
+    if (value(e.f) && value(e.arg) && e.f.exp_abs?) {
+      var L:set<int> :| forall x :: x !in L ==> typing(env_extend(x, e.f.ty, E), open_ee(e.f.e0, exp_fvar(x)), T);
+      var L' := L+fv_ee(e.f.e0);
+      var x := notin(L');
+      lemma_subst_ee_intro(x, e.f.e0, e.arg);
+      env_concat3_empty(Env([bd_typ(x, e.f.ty)]), E);
+      env_extend_concat(x, e.f.ty, Env([]), E);
+      lemma_typing_through_subst_ee(e.f.ty, E, Env([]), x, T, open_ee(e.f.e0, exp_fvar(x)), e.arg);
+    }
+  } else if (e.exp_tapp?) {
+    var T1 :| typing(E, e.tf, T1) && T1.typ_all? && typ_wf(E, e.targ) && open_tt(T1.ty0, e.targ)==T;
+    if (value(e.tf) && typ_lc(e.targ) && e.tf.exp_tabs?) {
+      var L:set<int> :| forall X :: X !in L ==> typing(env_plus_var(X, E), open_te(e.tf.te0, typ_fvar(X)), open_tt(T1.ty0, typ_fvar(X)));
+      var L' := L+fv_te(e.tf.te0)+fv_tt(T1.ty0);
+      var X := notin(L');
+      lemma_subst_tt_intro(X, T1.ty0, e.targ);
+      lemma_subst_te_intro(X, e.tf.te0, e.targ);
+      env_concat3_empty(Env([bd_var(X)]), E);
+      env_plus_concat(X, Env([]), E);
+      lemma_typing_through_subst_te(E, Env([]), X, open_te(e.tf.te0, typ_fvar(X)), open_tt(T1.ty0, typ_fvar(X)), e.targ);
+    }
+  }
+}
