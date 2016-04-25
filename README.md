@@ -20,7 +20,7 @@ I've translated some parts of Software Foundations from Coq to Dafny.
 * [Imp](https://github.com/namin/dafny-sandbox/blob/master/Imp.dfy)
 * [Types: Type Systems](https://github.com/namin/dafny-sandbox/blob/master/Imp.dfy)
 * [Stlc: The Simply Typed Lambda-Calculus](https://github.com/namin/dafny-sandbox/blob/master/Stlc.dfy)
-* [Norm: Normalization of STLC](https://github.com/namin/dafny-sandbox/blob/master/MoreStlc.dfy)
+* [Norm: Normalization of STLC](https://github.com/namin/dafny-sandbox/blob/master/Norm.dfy)
 * [References: Typing Mutable References](https://github.com/namin/dafny-sandbox/blob/master/References.dfy)
 
 Beyond Software Foundations
