@@ -4,7 +4,7 @@ Dafny for Metatheory of Programming Languages
 Dafny
 -----
 
-Dafny is an [open-source](http://dafny.codeplex.com/) automatic program
+Dafny is an [open-source](https://github.com/Microsoft/dafny) automatic program
 verifier for functional correctness developed at
 [Microsoft Research](http://research.microsoft.com/en-us/projects/dafny/).
 
