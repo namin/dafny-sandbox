@@ -1,6 +1,8 @@
 Dafny for Metatheory of Programming Languages
 =============================================
 
+[Related talk at MSR](http://research.microsoft.com/apps/video/default.aspx?id=198423).
+
 Dafny
 -----
 
