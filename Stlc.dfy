@@ -4,7 +4,7 @@
 /// Utilities
 
 // ... handy for partial functions
-datatype option<A> = None | Some(get: A);
+datatype option<A> = None | Some(get: A)
 
 /// -----
 /// Model
@@ -24,7 +24,7 @@ datatype ty =  TBase                             // (opaque base type)
 /*REC?
             | TVar(id: int) | TRec(X: nat, T: ty)// (iso-recursive types)
 ?REC*/
-            ;
+
 
 // Terms
 datatype tm = tvar(id: int)                      // x                  (variable)
@@ -43,7 +43,7 @@ datatype tm = tvar(id: int)                      // x                  (variable
 /*REC?
             | tfold(Tf: ty, tf: tm) | tunfold(tu: tm)//                (iso-recursive terms)
 ?REC*/
-            ;
+
 
 /// Operational Semantics
 
@@ -446,6 +446,18 @@ ghost method lemma_context_invariance(c: map<int,ty>, c': map<int,ty>, t: tm)
   ensures has_type(c, t) == has_type(c', t);
   decreases t;
 {
+  match t
+  case tvar(id) =>
+  case tabs(x, T, body) => {
+    var d := extend(x, T, c);
+    var d' := extend(x, T, c');
+    assert forall x: int :: x in fv(t) ==> find(d, x) == find(d', x);
+    lemma_context_invariance(d, d', body);
+  }
+  case tapp(f, arg) => {
+    lemma_context_invariance(c, c', f);
+    lemma_context_invariance(c, c', arg);
+  }
 }
 
 // Substitution preserves typing:
