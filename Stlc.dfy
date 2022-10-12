@@ -4,7 +4,7 @@
 /// Utilities
 
 // ... handy for partial functions
-datatype option<A> = None | Some(get: A);
+datatype option<A> = None | Some(get: A)
 
 /// -----
 /// Model
@@ -24,7 +24,6 @@ datatype ty =  TBase                             // (opaque base type)
 /*REC?
             | TVar(id: int) | TRec(X: nat, T: ty)// (iso-recursive types)
 ?REC*/
-            ;
 
 // Terms
 datatype tm = tvar(id: int)                      // x                  (variable)
@@ -43,7 +42,6 @@ datatype tm = tvar(id: int)                      // x                  (variable
 /*REC?
             | tfold(Tf: ty, tf: tm) | tunfold(tu: tm)//                (iso-recursive terms)
 ?REC*/
-            ;
 
 /// Operational Semantics
 
@@ -222,7 +220,7 @@ predicate reduces_to(t: tm, t': tm, n: nat)
 }
 
 // Examples
-ghost method lemma_step_example1(n: nat)
+lemma lemma_step_example1(n: nat)
   requires n > 0;
   // (\x:B=>B.x) (\x:B.x) reduces to (\x:B.x)
   ensures reduces_to(tapp(tabs(0, TArrow(TBase, TBase), tvar(0)), tabs(0, TBase, tvar(0))),
@@ -309,12 +307,12 @@ function has_type(c: map<int,ty>, t: tm): option<ty>
 
 // Examples
 
-ghost method example_typing_1()
+lemma example_typing_1()
   ensures has_type(map[], tabs(0, TBase, tvar(0))) == Some(TArrow(TBase, TBase));
 {
 }
 
-ghost method example_typing_2()
+lemma example_typing_2()
   ensures has_type(map[], tabs(0, TBase, tabs(1, TArrow(TBase, TBase), tapp(tvar(1), tapp(tvar(1), tvar(0)))))) ==
           Some(TArrow(TBase, TArrow(TArrow(TBase, TBase), TBase)));
 {
@@ -325,7 +323,7 @@ ghost method example_typing_2()
   assert has_type(c, tapp(tvar(1), tapp(tvar(1), tvar(0)))) == Some(TBase);
 }
 
-ghost method nonexample_typing_1()
+lemma nonexample_typing_1()
   ensures has_type(map[], tabs(0, TBase, tabs(1, TBase, tapp(tvar(0), tvar(1))))) == None;
 {
   var c := extend(1, TBase, extend(0, TBase, map[]));
@@ -333,7 +331,7 @@ ghost method nonexample_typing_1()
   assert has_type(c, tapp(tvar(0), tvar(1))) == None;
 }
 
-ghost method nonexample_typing_3(S: ty, T: ty)
+lemma nonexample_typing_3(S: ty, T: ty)
   ensures has_type(map[], tabs(0, S, tapp(tvar(0), tvar(0)))) != Some(T);
 {
   var c := extend(0, S, map[]);
@@ -341,7 +339,7 @@ ghost method nonexample_typing_3(S: ty, T: ty)
 }
 
 /*BOOL?
-ghost method example_typing_bool()
+lemma example_typing_bool()
   ensures has_type(map[], tabs(0, TBase, tabs(1, TBase, tabs(2, TBool, tif(tvar(2), tvar(0), tvar(1)))))) ==
           Some(TArrow(TBase, TArrow(TBase, TArrow(TBool, TBase))));
 {
@@ -358,7 +356,7 @@ ghost method example_typing_bool()
 ?BOOL*/
 
 /*NAT?
-ghost method example_typing_nat()
+lemma example_typing_nat()
   ensures has_type(map[], tabs(0, TNat, tprev(tvar(0)))) == Some(TArrow(TNat, TNat));
 {
   var c := extend(0, TNat, map[]);
@@ -368,7 +366,7 @@ ghost method example_typing_nat()
 
 /*REC?
 // TODO
-ghost method example_typing_rec()
+lemma example_typing_rec()
   // ∅ |- foldµT. T→α(λx : µT. T → α. (unfold x) x) : µT. T → α
   ensures has_type(map[], tfold(TRec(0, TArrow(TVar(0), TBase)), tabs(0, TRec(0, TArrow(TVar(0), TBase)), tapp(tunfold(tvar(0)), tvar(0))))) ==
           Some(TRec(0, TArrow(TVar(0), TBase)));
@@ -396,7 +394,7 @@ ghost method example_typing_rec()
 
 // Progress:
 // A well-typed term is either a value or it can step.
-ghost method theorem_progress(t: tm)
+lemma theorem_progress(t: tm)
   requires has_type(map[], t).Some?;
   ensures value(t) || step(t).Some?;
 {
@@ -406,7 +404,7 @@ ghost method theorem_progress(t: tm)
 
 // If x is free in t and t is well-typed in some context,
 // then this context must contain x.
-ghost method {:induction c, t} lemma_free_in_context(c: map<int,ty>, x: int, t: tm)
+lemma {:induction c, t} lemma_free_in_context(c: map<int,ty>, x: int, t: tm)
   requires x in fv(t);
   requires has_type(c, t).Some?;
   ensures find(c, x).Some?;
@@ -423,7 +421,7 @@ predicate closed(t: tm)
 
 // If a term can be well-typed in an empty context,
 // then it is closed.
-ghost method corollary_typable_empty__closed(t: tm)
+lemma corollary_typable_empty__closed(t: tm)
   requires has_type(map[], t).Some?;
   ensures closed(t);
 {
@@ -440,19 +438,23 @@ ghost method corollary_typable_empty__closed(t: tm)
 //    and context c' agrees with c on all free variables of t,
 // then the term t is well-typed in context c',
 //      with the same type as in context c.
-ghost method lemma_context_invariance(c: map<int,ty>, c': map<int,ty>, t: tm)
+lemma {:induction t} lemma_context_invariance(c: map<int,ty>, c': map<int,ty>, t: tm)
   requires has_type(c, t).Some?;
   requires forall x: int :: x in fv(t) ==> find(c, x) == find(c', x);
   ensures has_type(c, t) == has_type(c', t);
   decreases t;
 {
+  if (t.tabs?) {
+    assert fv(t.body) == fv(t) || fv(t.body) == fv(t) + {t.x};
+    lemma_context_invariance(extend(t.x, t.T, c), extend(t.x, t.T, c'), t.body);
+  }
 }
 
 // Substitution preserves typing:
 // If  s has type S in an empty context,
 // and t has type T in a context extended with x having type S,
 // then [x -> s]t has type T as well.
-ghost method lemma_substitution_preserves_typing(c: map<int,ty>, x: int, s: tm, t: tm)
+lemma lemma_substitution_preserves_typing(c: map<int,ty>, x: int, s: tm, t: tm)
   requires has_type(map[], s).Some?;
   requires has_type(extend(x, has_type(map[], s).get, c), t).Some?;
   ensures has_type(c, subst(x, s, t)) == has_type(extend(x, has_type(map[], s).get, c), t);
@@ -485,7 +487,7 @@ ghost method lemma_substitution_preserves_typing(c: map<int,ty>, x: int, s: tm, 
 
 // Preservation:
 // A well-type term which steps preserves its type.
-ghost method theorem_preservation(t: tm)
+lemma theorem_preservation(t: tm)
   requires has_type(map[], t).Some?;
   requires step(t).Some?;
   ensures has_type(map[], step(t).get) == has_type(map[], t);
@@ -509,7 +511,7 @@ predicate stuck(t: tm)
 
 // Type soundness:
 // A well-typed term cannot be stuck.
-ghost method corollary_soundness(t: tm, t': tm, T: ty, n: nat)
+lemma corollary_soundness(t: tm, t': tm, T: ty, n: nat)
   requires has_type(map[], t) == Some(T);
   requires reduces_to(t, t', n);
   ensures !stuck(t');
