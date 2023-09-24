@@ -4,16 +4,16 @@
 // --- BEGIN excerpt from Stlc.dfy ---
 
 // Utilities
-datatype option<A> = None | Some(get: A);
+datatype option<A> = None | Some(get: A)
 
 
 // Syntax
 
 // Types
-datatype ty = TBool | TArrow(paramT: ty, bodyT: ty);
+datatype ty = TBool | TArrow(paramT: ty, bodyT: ty)
 
 // Terms
-datatype tm = tvar(id: nat) | tapp(f: tm, arg: tm) | tabs(x: nat, T: ty, body: tm) | ttrue | tfalse | tif(c: tm, a: tm, b: tm);
+datatype tm = tvar(id: nat) | tapp(f: tm, arg: tm) | tabs(x: nat, T: ty, body: tm) | ttrue | tfalse | tif(c: tm, a: tm, b: tm)
 
 
 // Operational Semantics
@@ -49,7 +49,7 @@ function step(t: tm): option<tm>
 }
 
 function reduces_to(t: tm, t': tm, n: nat): bool
-  decreases n;
+  decreases n
 {
   t == t' || (n > 0 && step(t).Some? && reduces_to(step(t).get, t', n-1))
 }
@@ -59,7 +59,7 @@ function reduces_to(t: tm, t': tm, n: nat): bool
 
 // Contexts
 
-datatype partial_map<A> = Empty | Extend(x: nat, v: A, rest: partial_map<A>);
+datatype partial_map<A> = Empty | Extend(x: nat, v: A, rest: partial_map<A>)
 function find<A>(m: partial_map<A>, x: nat): option<A>
 {
   match m
@@ -67,11 +67,11 @@ function find<A>(m: partial_map<A>, x: nat): option<A>
   case Extend(x', v, rest) => if x==x' then Some(v) else find(rest, x)
 }
 
-datatype context = Context(m: partial_map<ty>);
+datatype context = Context(m: partial_map<ty>)
 
 // Typing Relation
 function has_type(c: context, t: tm): option<ty>
-  decreases t;
+  decreases t
 {
   match t
   /* Var */        case tvar(id) => find(c.m, id)
@@ -109,7 +109,7 @@ function appears_free_in(x: nat, t: tm): bool
   /* if3 */  (t.tif? && appears_free_in(x, t.b))
 }
 
-function closed(t: tm): bool
+ghost function closed(t: tm): bool
 {
   forall x: nat :: !appears_free_in(x, t)
 }
@@ -117,12 +117,12 @@ function closed(t: tm): bool
 
 // Substitution Lemma
 
-ghost method lemma_free_in_context(c: context, x: nat, t: tm)
-  requires appears_free_in(x, t);
-  requires has_type(c, t).Some?;
-  ensures find(c.m, x).Some?;
-  ensures has_type(c, t).Some?;
-  decreases t;
+lemma lemma_free_in_context(c: context, x: nat, t: tm)
+  requires appears_free_in(x, t)
+  requires has_type(c, t).Some?
+  ensures find(c.m, x).Some?
+  ensures has_type(c, t).Some?
+  decreases t
 {
   if (t.tabs?) {
     assert t.x != x;
@@ -132,26 +132,26 @@ ghost method lemma_free_in_context(c: context, x: nat, t: tm)
   }
 }
 
-ghost method corollary_typable_empty__closed(t: tm)
-  requires has_type(Context(Empty), t).Some?;
-  ensures closed(t);
+lemma corollary_typable_empty__closed(t: tm)
+  requires has_type(Context(Empty), t).Some?
+  ensures closed(t)
 {
-  forall x: nat ensures !appears_free_in(x, t);
+  forall x: nat ensures !appears_free_in(x, t)
   {
     if (appears_free_in(x, t)) {
       lemma_free_in_context(Context(Empty), x, t);
-      assert find(Empty, x).Some?;
+      assert find<ty>(Empty, x).Some?;
       assert false;
     }
     assert !appears_free_in(x, t);
   }
 }
 
-ghost method lemma_context_invariance(c: context, c': context, t: tm)
-  requires has_type(c, t).Some?;
-  requires forall x: nat :: appears_free_in(x, t) ==> find(c.m, x) == find(c'.m, x);
-  ensures has_type(c, t) == has_type(c', t);
-  decreases t;
+lemma lemma_context_invariance(c: context, c': context, t: tm)
+  requires has_type(c, t).Some?
+  requires forall x: nat :: appears_free_in(x, t) ==> find(c.m, x) == find(c'.m, x)
+  ensures has_type(c, t) == has_type(c', t)
+  decreases t
 {
   if (t.tabs?) {
     assert find(Extend(t.x, t.T, c.m), t.x) == find(Extend(t.x, t.T, c'.m), t.x);
@@ -159,11 +159,11 @@ ghost method lemma_context_invariance(c: context, c': context, t: tm)
   }
 }
 
-ghost method lemma_substitution_preserves_typing(c: context, x: nat, t': tm, t: tm)
-  requires has_type(Context(Empty), t').Some?;
-  requires has_type(Context(Extend(x, has_type(Context(Empty), t').get, c.m)), t).Some?;
-  ensures has_type(c, subst(x, t', t)) == has_type(Context(Extend(x, has_type(Context(Empty), t').get, c.m)), t);
-  decreases t;
+lemma lemma_substitution_preserves_typing(c: context, x: nat, t': tm, t: tm)
+  requires has_type(Context(Empty), t').Some?
+  requires has_type(Context(Extend(x, has_type(Context(Empty), t').get, c.m)), t).Some?
+  ensures has_type(c, subst(x, t', t)) == has_type(Context(Extend(x, has_type(Context(Empty), t').get, c.m)), t)
+  decreases t
 {
   if (t.tvar? && t.id==x) {
     corollary_typable_empty__closed(t');
@@ -187,10 +187,10 @@ ghost method lemma_substitution_preserves_typing(c: context, x: nat, t': tm, t: 
 
 
 // Preservation
-ghost method theorem_preservation(t: tm)
-  requires has_type(Context(Empty), t).Some?;
-  requires step(t).Some?;
-  ensures has_type(Context(Empty), step(t).get) == has_type(Context(Empty), t);
+lemma theorem_preservation(t: tm)
+  requires has_type(Context(Empty), t).Some?
+  requires step(t).Some?
+  ensures has_type(Context(Empty), step(t).get) == has_type(Context(Empty), t)
 {
   if (t.tapp? && step(t.f).None? && step(t.arg).None?) {
     lemma_substitution_preserves_typing(Context(Empty), t.f.x, t.arg, t.f.body);
@@ -199,19 +199,19 @@ ghost method theorem_preservation(t: tm)
 
 // --- END excerpt from Stlc.dfy ---
 
-function halts(t: tm): bool
+ghost function halts(t: tm): bool
 {
   exists t', n:nat :: reduces_to(t, t', n) && value(t')
 }
 
-ghost method lemma_value_halts(v: tm)
-  requires value(v);
-  ensures halts(v);
+lemma lemma_value_halts(v: tm)
+  requires value(v)
+  ensures halts(v)
 {
   assert reduces_to(v, v, 0);
 }
 
-function R(T: ty, t: tm): bool
+ghost function R(T: ty, t: tm): bool
 {
  match T
  /* bool */  case TBool =>
@@ -223,42 +223,42 @@ function R(T: ty, t: tm): bool
    (forall s :: R(T1, s) ==> R(T2, tapp(t, s)))
 }
 
-ghost method lemma_R_halts(T: ty, t: tm)
-  requires R(T, t);
-  ensures halts(t);
+lemma lemma_R_halts(T: ty, t: tm)
+  requires R(T, t)
+  ensures halts(t)
 {
 }
 
-ghost method lemma_R_typable_empty(T: ty, t: tm)
-  requires R(T, t);
-  ensures has_type(Context(Empty), t) == Some(T);
+lemma lemma_R_typable_empty(T: ty, t: tm)
+  requires R(T, t)
+  ensures has_type(Context(Empty), t) == Some(T)
 {
 }
 
 // Membership in R_T is invariant under evaluation
 
-ghost method lemma_step_preserves_halting(t: tm, t': tm)
-  requires step(t) == Some(t');
-  ensures halts(t) <==> halts(t');
+lemma lemma_step_preserves_halting(t: tm, t': tm)
+  requires step(t) == Some(t')
+  ensures halts(t) <==> halts(t')
 {
   if (halts(t)) {
     forall (t'', n:nat | reduces_to(t, t'', n) && value(t''))
-      ensures reduces_to(t', t'', n-1) && value(t'');
+      ensures reduces_to(t', t'', n-1) && value(t'')
     {
     }
   }
   if (!halts(t)) {
     forall (t'', n:nat | !reduces_to(t, t'', n+1) || !value(t''))
-      ensures !reduces_to(t', t'', n) || !value(t'');
+      ensures !reduces_to(t', t'', n) || !value(t'')
     {
     }
   }
 }
 
-ghost method lemma_step_preserves_R(T: ty, t: tm, t': tm)
-  requires step(t) == Some(t');
-  requires R(T, t);
-  ensures R(T, t');
+lemma lemma_step_preserves_R(T: ty, t: tm, t': tm)
+  requires step(t) == Some(t')
+  requires R(T, t)
+  ensures R(T, t')
 {
   theorem_preservation(t);
   lemma_step_preserves_halting(t, t');
@@ -267,7 +267,7 @@ ghost method lemma_step_preserves_R(T: ty, t: tm, t': tm)
     var T2 := T.bodyT;
     assert R(TArrow(T1, T2), t);
     forall (s | R(T1, s))
-      ensures R(T2, tapp(t', s));
+      ensures R(T2, tapp(t', s))
     {
       assert R(T2, tapp(t, s));
       lemma_step_preserves_R(T2, tapp(t, s), tapp(t', s));
@@ -275,11 +275,11 @@ ghost method lemma_step_preserves_R(T: ty, t: tm, t': tm)
   }
 }
 
-ghost method lemma_multistep_preserves_R(T: ty, t: tm, t': tm, n: nat)
-  requires reduces_to(t, t', n);
-  requires R(T, t);
-  ensures R(T, t');
-  decreases n;
+lemma lemma_multistep_preserves_R(T: ty, t: tm, t': tm, n: nat)
+  requires reduces_to(t, t', n)
+  requires R(T, t)
+  ensures R(T, t')
+  decreases n
 {
   if (t != t' && n > 0) {
     lemma_step_preserves_R(T, t, step(t).get);
@@ -287,11 +287,11 @@ ghost method lemma_multistep_preserves_R(T: ty, t: tm, t': tm, n: nat)
   }
 }
 
-ghost method lemma_step_preserves_R'(T: ty, t: tm, t': tm)
-  requires has_type(Context(Empty), t) == Some(T);
-  requires step(t) == Some(t');
-  requires R(T, t');
-  ensures R(T, t);
+lemma lemma_step_preserves_R'(T: ty, t: tm, t': tm)
+  requires has_type(Context(Empty), t) == Some(T)
+  requires step(t) == Some(t')
+  requires R(T, t')
+  ensures R(T, t)
 {
   lemma_step_preserves_halting(t, t');
   if (T.TArrow?) {
@@ -299,7 +299,7 @@ ghost method lemma_step_preserves_R'(T: ty, t: tm, t': tm)
     var T2 := T.bodyT;
     assert R(TArrow(T1, T2), t');
     forall (s | R(T1, s))
-      ensures R(T2, tapp(t, s));
+      ensures R(T2, tapp(t, s))
     {
       assert R(T2, tapp(t', s));
       lemma_R_typable_empty(T1, s);
@@ -308,12 +308,12 @@ ghost method lemma_step_preserves_R'(T: ty, t: tm, t': tm)
   }
 }
 
-ghost method lemma_multistep_preserves_R'(T: ty, t: tm, t': tm, n: nat)
-  requires has_type(Context(Empty), t) == Some(T);
-  requires reduces_to(t, t', n);
-  requires R(T, t');
-  ensures R(T, t);
-  decreases n;
+lemma lemma_multistep_preserves_R'(T: ty, t: tm, t': tm, n: nat)
+  requires has_type(Context(Empty), t) == Some(T)
+  requires reduces_to(t, t', n)
+  requires R(T, t')
+  ensures R(T, t)
+  decreases n
 {
   if (t != t' && n > 0) {
     theorem_preservation(t);
@@ -355,7 +355,7 @@ function drop<X>(n: nat, nxs: partial_map<X>): partial_map<X>
     if (n'==n) then drop(n, nxs') else Extend(n', x, drop(n, nxs'))
 }
 
-function instantiation(c: partial_map<ty>, e: partial_map<tm>): bool
+ghost function instantiation(c: partial_map<ty>, e: partial_map<tm>): bool
 {
   match c
   case Empty => e.Empty?
@@ -368,42 +368,42 @@ function instantiation(c: partial_map<ty>, e: partial_map<tm>): bool
 
 // More substitution facts
 
-ghost method lemma_vacuous_substitution(t: tm, x: nat)
-  requires !appears_free_in(x, t);
-  ensures forall t' :: subst(x, t', t) == t;
+lemma lemma_vacuous_substitution(t: tm, x: nat)
+  requires !appears_free_in(x, t)
+  ensures forall t' :: subst(x, t', t) == t
 {
 }
 
-ghost method lemma_subst_closed(t: tm)
-  requires closed(t);
-  ensures forall x:nat, t' :: subst(x, t', t) == t;
+lemma lemma_subst_closed(t: tm)
+  requires closed(t)
+  ensures forall x:nat, t' :: subst(x, t', t) == t
 {
   forall (x:nat)
-    ensures forall t' :: subst(x, t', t) == t;
+    ensures forall t' :: subst(x, t', t) == t
   {
     lemma_vacuous_substitution(t, x);
   }
 }
 
-ghost method lemma_subst_not_afi(t: tm, x: nat, v: tm)
-  requires closed(v);
-  ensures !appears_free_in(x, subst(x, v, t));
+lemma lemma_subst_not_afi(t: tm, x: nat, v: tm)
+  requires closed(v)
+  ensures !appears_free_in(x, subst(x, v, t))
 {
 }
 
-ghost method lemma_duplicate_subst(t': tm, x: nat, t: tm, v: tm)
-  requires closed(v);
-  ensures subst(x, t, subst(x, v, t')) == subst(x, v, t');
+lemma lemma_duplicate_subst(t': tm, x: nat, t: tm, v: tm)
+  requires closed(v)
+  ensures subst(x, t, subst(x, v, t')) == subst(x, v, t')
 {
   lemma_subst_not_afi(t', x, v);
   lemma_vacuous_substitution(subst(x, v, t'), x);
 }
 
-ghost method lemma_swap_subst(t: tm, x: nat, x1: nat, v: tm, v1: tm)
-  requires x != x1;
-  requires closed(v);
-  requires closed(v1);
-  ensures subst(x1, v1, subst(x, v, t)) == subst(x, v, subst(x1, v1, t));
+lemma lemma_swap_subst(t: tm, x: nat, x1: nat, v: tm, v1: tm)
+  requires x != x1
+  requires closed(v)
+  requires closed(v1)
+  ensures subst(x1, v1, subst(x, v, t)) == subst(x, v, subst(x1, v1, t))
 {
   if (t.tvar?) {
     if (t.id==x) {
@@ -417,9 +417,9 @@ ghost method lemma_swap_subst(t: tm, x: nat, x1: nat, v: tm, v1: tm)
 
 // Properties of multi-substitutions
 
-ghost method lemma_msubst_closed_any(t: tm, e: partial_map<tm>)
-  requires closed(t);
-  ensures msubst(e, t) == t;
+lemma lemma_msubst_closed_any(t: tm, e: partial_map<tm>)
+  requires closed(t)
+  ensures msubst(e, t) == t
 {
   match e {
   case Empty =>
@@ -429,28 +429,28 @@ ghost method lemma_msubst_closed_any(t: tm, e: partial_map<tm>)
   }
 }
 
-ghost method lemma_msubst_closed(t: tm)
-  requires closed(t);
-  ensures forall e :: msubst(e, t) == t;
+lemma lemma_msubst_closed(t: tm)
+  requires closed(t)
+  ensures forall e :: msubst(e, t) == t
 {
   forall (e: partial_map<tm>)
-    ensures msubst(e, t) == t;
+    ensures msubst(e, t) == t
   {
     lemma_msubst_closed_any(t, e);
   }
 }
 
-function closed_env(e: partial_map<tm>): bool
+ghost function closed_env(e: partial_map<tm>): bool
 {
   match e
   case Empty => true
   case Extend(x, t, e') => closed(t) && closed_env(e')
 }
 
-ghost method lemma_subst_msubst(e: partial_map<tm>, x: nat, v: tm, t: tm)
-  requires closed(v);
-  requires closed_env(e);
-  ensures msubst(e, subst(x, v, t)) == subst(x, v, msubst(drop(x, e), t));
+lemma lemma_subst_msubst(e: partial_map<tm>, x: nat, v: tm, t: tm)
+  requires closed(v)
+  requires closed_env(e)
+  ensures msubst(e, subst(x, v, t)) == subst(x, v, msubst(drop(x, e), t))
 {
   match e {
   case Empty =>
@@ -464,10 +464,10 @@ ghost method lemma_subst_msubst(e: partial_map<tm>, x: nat, v: tm, t: tm)
   }
 }
 
-ghost method lemma_msubst_var(e: partial_map<tm>, x: nat)
-  requires closed_env(e);
-  ensures lookup(x, e).None? ==> msubst(e, tvar(x)) == tvar(x);
-  ensures lookup(x, e).Some? ==> msubst(e, tvar(x)) == lookup(x, e).get;
+lemma lemma_msubst_var(e: partial_map<tm>, x: nat)
+  requires closed_env(e)
+  ensures lookup(x, e).None? ==> msubst(e, tvar(x)) == tvar(x)
+  ensures lookup(x, e).Some? ==> msubst(e, tvar(x)) == lookup(x, e).get
 {
   match e {
   case Empty =>
@@ -478,8 +478,8 @@ ghost method lemma_msubst_var(e: partial_map<tm>, x: nat)
   }
 }
 
-ghost method lemma_msubst_abs(e: partial_map<tm>, x: nat, T: ty, t: tm)
-  ensures msubst(e, tabs(x, T, t)) == tabs(x, T, msubst(drop(x, e), t));
+lemma lemma_msubst_abs(e: partial_map<tm>, x: nat, T: ty, t: tm)
+  ensures msubst(e, tabs(x, T, t)) == tabs(x, T, msubst(drop(x, e), t))
 {
   match e {
   case Empty =>
@@ -487,8 +487,8 @@ ghost method lemma_msubst_abs(e: partial_map<tm>, x: nat, T: ty, t: tm)
   }
 }
 
-ghost method lemma_msubst_app(e: partial_map<tm>, t1: tm, t2: tm)
-  ensures msubst(e, tapp(t1, t2)) == tapp(msubst(e, t1), msubst(e, t2));
+lemma lemma_msubst_app(e: partial_map<tm>, t1: tm, t2: tm)
+  ensures msubst(e, tapp(t1, t2)) == tapp(msubst(e, t1), msubst(e, t2))
 {
   match e {
   case Empty =>
@@ -496,8 +496,8 @@ ghost method lemma_msubst_app(e: partial_map<tm>, t1: tm, t2: tm)
   }
 }
 
-ghost method lemma_msubst_true(e: partial_map<tm>)
-  ensures msubst(e, ttrue) == ttrue;
+lemma lemma_msubst_true(e: partial_map<tm>)
+  ensures msubst(e, ttrue) == ttrue
 {
   match e {
   case Empty =>
@@ -505,8 +505,8 @@ ghost method lemma_msubst_true(e: partial_map<tm>)
   }
 }
 
-ghost method lemma_msubst_false(e: partial_map<tm>)
-  ensures msubst(e, tfalse) == tfalse;
+lemma lemma_msubst_false(e: partial_map<tm>)
+  ensures msubst(e, tfalse) == tfalse
 {
   match e {
   case Empty =>
@@ -514,8 +514,8 @@ ghost method lemma_msubst_false(e: partial_map<tm>)
   }
 }
 
-ghost method lemma_msubst_if(e: partial_map<tm>, c: tm, a: tm, b: tm)
-  ensures msubst(e, tif(c, a, b)) == tif(msubst(e, c), msubst(e, a), msubst(e, b));
+lemma lemma_msubst_if(e: partial_map<tm>, c: tm, a: tm, b: tm)
+  ensures msubst(e, tif(c, a, b)) == tif(msubst(e, c), msubst(e, a), msubst(e, b))
 {
   match e {
   case Empty =>
@@ -525,27 +525,27 @@ ghost method lemma_msubst_if(e: partial_map<tm>, c: tm, a: tm, b: tm)
 
 // Properties of multi-extensions
 
-ghost method lemma_mextend(c: partial_map<ty>)
-  ensures mextend(Empty, c) == c;
+lemma lemma_mextend(c: partial_map<ty>)
+  ensures mextend(Empty, c) == c
 {
 }
 
-ghost method lemma_mextend_lookup(c: partial_map<ty>, x: nat)
-  ensures lookup(x, c) == lookup(x, mextend(Empty, c));
+lemma lemma_mextend_lookup(c: partial_map<ty>, x: nat)
+  ensures lookup(x, c) == lookup(x, mextend(Empty, c))
 {
 }
 
-ghost method lemma_mextend_drop(c: partial_map<ty>, init: partial_map<ty>, x: nat, x': nat)
-  ensures lookup(x', mextend(init, drop(x, c))) == if x==x' then lookup(x', init) else lookup(x', mextend(init, c));
+lemma lemma_mextend_drop(c: partial_map<ty>, init: partial_map<ty>, x: nat, x': nat)
+  ensures lookup(x', mextend(init, drop(x, c))) == if x==x' then lookup(x', init) else lookup(x', mextend(init, c))
 {
 }
 
 // Properties of Instantiations
 
-ghost method lemma_instantiation_domains_match_any(c: partial_map<ty>, e: partial_map<tm>, x: nat)
-  requires instantiation(c, e);
-  requires lookup(x, c).Some?;
-  ensures lookup(x, e).Some?;
+lemma lemma_instantiation_domains_match_any(c: partial_map<ty>, e: partial_map<tm>, x: nat)
+  requires instantiation(c, e)
+  requires lookup(x, c).Some?
+  ensures lookup(x, e).Some?
 {
   match c {
   case Empty =>
@@ -561,20 +561,20 @@ ghost method lemma_instantiation_domains_match_any(c: partial_map<ty>, e: partia
   }
 }
 
-ghost method lemma_instantiation_domains_match(c: partial_map<ty>, e: partial_map<tm>)
-  requires instantiation(c, e);
-  ensures forall x:nat :: lookup(x, c).Some? ==> lookup(x, e).Some?;
+lemma lemma_instantiation_domains_match(c: partial_map<ty>, e: partial_map<tm>)
+  requires instantiation(c, e)
+  ensures forall x:nat :: lookup(x, c).Some? ==> lookup(x, e).Some?
 {
   forall (x:nat | lookup(x, c).Some?)
-    ensures lookup(x, e).Some?;
+    ensures lookup(x, e).Some?
   {
     lemma_instantiation_domains_match_any(c, e, x);
   }
 }
 
-ghost method lemma_instantiation_env_closed(c: partial_map<ty>, e: partial_map<tm>)
-  requires instantiation(c, e);
-  ensures closed_env(e);
+lemma lemma_instantiation_env_closed(c: partial_map<ty>, e: partial_map<tm>)
+  requires instantiation(c, e)
+  ensures closed_env(e)
 {
   match e {
   case Empty =>
@@ -590,11 +590,11 @@ ghost method lemma_instantiation_env_closed(c: partial_map<ty>, e: partial_map<t
   }
 }
 
-ghost method lemma_instantiation_R(c: partial_map<ty>, e: partial_map<tm>, x: nat, t: tm, T: ty)
-  requires instantiation(c, e);
-  requires lookup(x, c) == Some(T);
-  requires lookup(x, e) == Some(t);
-  ensures R(T, t);
+lemma lemma_instantiation_R(c: partial_map<ty>, e: partial_map<tm>, x: nat, t: tm, T: ty)
+  requires instantiation(c, e)
+  requires lookup(x, c) == Some(T)
+  requires lookup(x, e) == Some(t)
+  ensures R(T, t)
 {
   match e {
   case Empty =>
@@ -612,9 +612,9 @@ ghost method lemma_instantiation_R(c: partial_map<ty>, e: partial_map<tm>, x: na
   }
 }
 
-ghost method lemma_instantiation_drop_any(c: partial_map<ty>, e: partial_map<tm>, x: nat)
-  requires instantiation(c, e);
-  ensures instantiation(drop(x, c), drop(x, e));
+lemma lemma_instantiation_drop_any(c: partial_map<ty>, e: partial_map<tm>, x: nat)
+  requires instantiation(c, e)
+  ensures instantiation(drop(x, c), drop(x, e))
 {
   match e {
   case Empty =>
@@ -634,23 +634,23 @@ ghost method lemma_instantiation_drop_any(c: partial_map<ty>, e: partial_map<tm>
   }
 }
 
-ghost method lemma_instantiation_drop(c: partial_map<ty>, e: partial_map<tm>)
-  requires instantiation(c, e);
-  ensures forall x:nat :: instantiation(drop(x, c), drop(x, e));
+lemma lemma_instantiation_drop(c: partial_map<ty>, e: partial_map<tm>)
+  requires instantiation(c, e)
+  ensures forall x:nat :: instantiation(drop(x, c), drop(x, e))
 {
   forall (x:nat)
-    ensures instantiation(drop(x, c), drop(x, e));
+    ensures instantiation(drop(x, c), drop(x, e))
   {
     lemma_instantiation_drop_any(c, e, x);
   }
 }
 
 // Congruence lemmas on multistep
-ghost method lemma_multistep_App2(v: tm, t: tm, t': tm, n: nat)
-  requires value(v);
-  requires reduces_to(t, t', n);
-  ensures reduces_to(tapp(v, t), tapp(v, t'), n);
-  decreases n;
+lemma lemma_multistep_App2(v: tm, t: tm, t': tm, n: nat)
+  requires value(v)
+  requires reduces_to(t, t', n)
+  ensures reduces_to(tapp(v, t), tapp(v, t'), n)
+  decreases n
 {
   if (t != t') {
     lemma_multistep_App2(v, step(t).get, t', n-1);
@@ -661,10 +661,10 @@ ghost method lemma_multistep_App2(v: tm, t: tm, t': tm, n: nat)
 // The R Lemma
 
 
-ghost method lemma_msubst_preserves_typing_any(c: partial_map<ty>, e: partial_map<tm>, init: partial_map<ty>, t: tm, S: ty)
-  requires instantiation(c, e);
-  requires has_type(Context(mextend(init, c)), t) == Some(S);
-  ensures has_type(Context(init), msubst(e, t)) == Some(S);
+lemma lemma_msubst_preserves_typing_any(c: partial_map<ty>, e: partial_map<tm>, init: partial_map<ty>, t: tm, S: ty)
+  requires instantiation(c, e)
+  requires has_type(Context(mextend(init, c)), t) == Some(S)
+  ensures has_type(Context(init), msubst(e, t)) == Some(S)
 {
   match c {
   case Empty =>
@@ -679,14 +679,14 @@ ghost method lemma_msubst_preserves_typing_any(c: partial_map<ty>, e: partial_ma
   }
 }
 
-ghost method lemma_msubst_preserves_typing(c: partial_map<ty>, e: partial_map<tm>)
-  requires instantiation(c, e);
+lemma lemma_msubst_preserves_typing(c: partial_map<ty>, e: partial_map<tm>)
+  requires instantiation(c, e)
   ensures forall init, t, S ::
     has_type(Context(mextend(init, c)), t) == Some(S) ==>
-    has_type(Context(init), msubst(e, t)) == Some(S);
+    has_type(Context(init), msubst(e, t)) == Some(S)
 {
   forall (init, t, S | has_type(Context(mextend(init, c)), t) == Some(S))
-    ensures has_type(Context(init), msubst(e, t)) == Some(S);
+    ensures has_type(Context(init), msubst(e, t)) == Some(S)
   {
     lemma_msubst_preserves_typing_any(c, e, init, t, S);
   }
@@ -694,18 +694,18 @@ ghost method lemma_msubst_preserves_typing(c: partial_map<ty>, e: partial_map<tm
 
 // more helpers for R lemma
 
-ghost method lemma_reduces_to_value_if(T: ty, c: tm, a: tm, b: tm, c': tm, a': tm, b': tm, nc: nat, na: nat, nb: nat)
-  requires has_type(Context(Empty), c) == Some(TBool);
-  requires has_type(Context(Empty), a) == Some(T);
-  requires has_type(Context(Empty), b) == Some(T);
-  requires reduces_to(c, c', nc) && value(c');
-  requires reduces_to(a, a', na) && value(a');
-  requires reduces_to(b, b', nb) && value(b');
-  ensures c' == ttrue ==> reduces_to(tif(c, a, b), a', nc+na+1);
-  ensures c' == tfalse ==> reduces_to(tif(c, a, b), b', nc+nb+1);
-  ensures c' == ttrue || c' == tfalse;
-  ensures has_type(Context(Empty), tif(c, a, b)) == Some(T);
-  decreases nc+na+nb;
+lemma lemma_reduces_to_value_if(T: ty, c: tm, a: tm, b: tm, c': tm, a': tm, b': tm, nc: nat, na: nat, nb: nat)
+  requires has_type(Context(Empty), c) == Some(TBool)
+  requires has_type(Context(Empty), a) == Some(T)
+  requires has_type(Context(Empty), b) == Some(T)
+  requires reduces_to(c, c', nc) && value(c')
+  requires reduces_to(a, a', na) && value(a')
+  requires reduces_to(b, b', nb) && value(b')
+  ensures c' == ttrue ==> reduces_to(tif(c, a, b), a', nc+na+1)
+  ensures c' == tfalse ==> reduces_to(tif(c, a, b), b', nc+nb+1)
+  ensures c' == ttrue || c' == tfalse
+  ensures has_type(Context(Empty), tif(c, a, b)) == Some(T)
+  decreases nc+na+nb
 {
   if (c != c') {
     theorem_preservation(c);
@@ -726,12 +726,12 @@ ghost method lemma_reduces_to_value_if(T: ty, c: tm, a: tm, b: tm, c': tm, a': t
   }
 }
 
-ghost method lemma_R_if(T: ty, c: tm, a: tm, b: tm)
-  requires R(TBool, c);
-  requires R(T, a);
-  requires R(T, b);
-  requires has_type(Context(Empty), tif(c, a, b)) == Some(T);
-  ensures R(T, tif(c, a, b));
+lemma lemma_R_if(T: ty, c: tm, a: tm, b: tm)
+  requires R(TBool, c)
+  requires R(T, a)
+  requires R(T, b)
+  requires has_type(Context(Empty), tif(c, a, b)) == Some(T)
+  ensures R(T, tif(c, a, b))
 {
   assert R(TBool, c);
   assert R(T, a);
@@ -743,7 +743,7 @@ ghost method lemma_R_if(T: ty, c: tm, a: tm, b: tm)
             reduces_to(c, c', nc) && value(c') &&
             reduces_to(a, a', na) && value(a') &&
             reduces_to(b, b', nb) && value(b'))
-  ensures R(T, tif(c, a, b));
+  ensures R(T, tif(c, a, b))
   {
     lemma_reduces_to_value_if(has_type(Context(Empty), a).get, c, a, b, c', a', b', nc, na, nb);
     if (c' == ttrue) {
@@ -759,11 +759,11 @@ ghost method lemma_R_if(T: ty, c: tm, a: tm, b: tm)
 
 // the R lemma, finally...
 
-ghost method lemma_msubst_R(c: partial_map<ty>, e: partial_map<tm>, t: tm, T: ty)
-  requires has_type(Context(c), t) == Some(T);
-  requires instantiation(c, e);
-  ensures R(T, msubst(e, t));
-  decreases t;
+lemma lemma_msubst_R(c: partial_map<ty>, e: partial_map<tm>, t: tm, T: ty)
+  requires has_type(Context(c), t) == Some(T)
+  requires instantiation(c, e)
+  ensures R(T, msubst(e, t))
+  decreases t
 {
   lemma_instantiation_env_closed(c, e);
   match t {
@@ -783,10 +783,10 @@ ghost method lemma_msubst_R(c: partial_map<ty>, e: partial_map<tm>, t: tm, T: ty
     assert halts(msubst(e, t));
 
     forall (s | R(T1, s))
-      ensures R(T.bodyT, tapp(msubst(e, t), s));
+      ensures R(T.bodyT, tapp(msubst(e, t), s))
     {
       forall (s', n:nat | reduces_to(s, s', n) && value(s'))
-        ensures R(T.bodyT, tapp(msubst(e, t), s));
+        ensures R(T.bodyT, tapp(msubst(e, t), s))
       {
         lemma_multistep_preserves_R(T1, s, s', n);
         lemma_R_typable_empty(T1, s');
@@ -828,9 +828,9 @@ ghost method lemma_msubst_R(c: partial_map<ty>, e: partial_map<tm>, t: tm, T: ty
 }
 
 // Normalization Theorem
-ghost method theorem_normalization(t: tm)
-  requires has_type(Context(Empty), t).Some?;
-  ensures halts(t);
+lemma theorem_normalization(t: tm)
+  requires has_type(Context(Empty), t).Some?
+  ensures halts(t)
 {
   var T := has_type(Context(Empty), t).get;
   lemma_msubst_R(Empty, Empty, t, T);

@@ -3,9 +3,9 @@
 // Arithmetic and Boolean Expressions
 
 // Syntax
-datatype aexp = ANum(int) | APlus(aexp, aexp) | AMinus(aexp, aexp) | AMult(aexp, aexp);
+datatype aexp = ANum(int) | APlus(aexp, aexp) | AMinus(aexp, aexp) | AMult(aexp, aexp)
 
-datatype bexp = BTrue | BFalse | BEq(aexp, aexp) | BLe(aexp, aexp) | BNot(bexp) | BAnd(bexp, bexp);
+datatype bexp = BTrue | BFalse | BEq(aexp, aexp) | BLe(aexp, aexp) | BNot(bexp) | BAnd(bexp, bexp)
 
 // Evaluation
 function aeval(e: aexp): int
@@ -30,7 +30,7 @@ function beval(e: bexp): bool
 
 // Optimization
 function optimize_0plus(e: aexp): aexp
-  ensures aeval(optimize_0plus(e)) == aeval(e);
+  ensures aeval(optimize_0plus(e)) == aeval(e)
 {
   match e
   case ANum(n) => ANum(n)
