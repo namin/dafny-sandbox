@@ -395,9 +395,49 @@ lemma example_typing_rec()
 // Progress:
 // A well-typed term is either a value or it can step.
 lemma theorem_progress(t: tm)
-  requires has_type(map[], t).Some?;
-  ensures value(t) || step(t).Some?;
+  requires has_type(map[], t).Some?
+  ensures value(t) || step(t).Some?
 {
+}
+
+lemma {:induction false} theorem_progress_manual(t: tm)
+  requires has_type(map[], t).Some?
+  ensures value(t) || step(t).Some?
+{
+  match t
+  /* Var */  case tvar(id) =>
+  /* Abs */  case tabs(x, T, body) =>
+  /* App */  case tapp(f, arg) =>
+  theorem_progress_manual(f);
+  theorem_progress_manual(arg);
+//BOOL?
+  /* True */  case ttrue =>
+  /* False */ case tfalse =>
+  /* If */    case tif(cond, a, b) =>
+  theorem_progress_manual(cond);
+  theorem_progress_manual(a);
+  theorem_progress_manual(b);
+//?BOOL
+//NAT?
+  /* Zero */  case tzero =>
+  /* Prev */  case tprev(n) =>
+  theorem_progress_manual(n);
+  /* Succ */  case tsucc(p) =>
+  theorem_progress_manual(p);
+//BOOL?
+  /* Eq */    case teq(n1, n2) =>
+  theorem_progress_manual(n1);
+  theorem_progress_manual(n2);
+//?BOOL
+//?NAT
+//REC?
+  /* Fold */  case tfold(U, t1) =>
+  if (ty_closed(U)) {
+    theorem_progress_manual(t1);
+  }
+  /* Unfold */ case tunfold(t1) =>
+  theorem_progress_manual(t1);
+//?REC
 }
 
 // Towards preservation and the substitution lemma
