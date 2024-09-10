@@ -6,7 +6,8 @@
 // - natural numebrs (NAT),
 // - iso-recursive types (REC).
 //
-// The extensions can be toggled by searching and replacing all the corresponding opening and closing markers.
+// The extensions can be toggled commenting modular sections in and out,
+// and this can be achieved by searching and replacing all the corresponding opening and closing markers.
 // For example, to disable booleans (and vice versa to enable them),
 // search for the opening marker `//*BOOL?` and replace with `/*BOOL?` and
 // search for the closing marker `//?BOOL*/` and replace with `/?BOOL*/`.
