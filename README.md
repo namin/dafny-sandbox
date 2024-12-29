@@ -3,19 +3,15 @@ Dafny for Metatheory of Programming Languages
 
 [Related talk at MSR](http://research.microsoft.com/apps/video/default.aspx?id=198423).
 
-Dafny
+[Dafny](https://dafny.org/)
 -----
-
-Dafny is an [open-source](https://github.com/Microsoft/dafny) automatic program
-verifier for functional correctness developed at
-[Microsoft Research](http://research.microsoft.com/en-us/projects/dafny/).
 
 Software Foundations
 --------------------
 
 Software Foundations is a textbook on programming languages written in
 [Coq](http://coq.inria.fr) and
-[available online](http://www.cis.upenn.edu/~bcpierce/sf/).
+[available online](https://softwarefoundations.cis.upenn.edu/).
 
 I've translated some parts of Software Foundations from Coq to Dafny.
 
