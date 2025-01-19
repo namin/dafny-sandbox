@@ -259,13 +259,18 @@ lemma propagateContains(l: Literal, p: Problem, c: Clause)
     }
   }
 }
-
-/*
 // Helper lemma 2: Appending a literal preserves soundness for a specific assignment
 lemma appendAssignmentsSoundness(l: Literal, asg: Assignment, p: Problem) 
   requires satisfies(p, asg)
   ensures satisfies(p, [l] + asg)
-*/
+{
+  forall c | c in p 
+  ensures exists lit :: lit in c && lit in ([l] + asg)
+  {
+    var lit :| lit in c && lit in asg;  // from requires
+    assert lit in [l] + asg;  // since asg is a suffix of [l] + asg
+  }
+}
 
 /*
 lemma solveComplete(p: Problem)
