@@ -1,8 +1,11 @@
 // A Very Small SAT Solver in Dafny
 // https://web.archive.org/web/20201109101535/http://www.cse.chalmers.se/~algehed/blogpostsHTML/SAT.html
-// translated from the original Haskell mostly by ChatGPT
+// translated from the original Haskell mostly by ChatGPT 4o
 // for ideas on what to prove, see this old port to Coq here: https://github.com/acorrenson/SATurne
 // see also my older DPLL work based on Adam's Chlipala textbook exercise: https://github.com/namin/coq-sandbox/blob/master/Dpll.v
+// the high-level properties to verify were initially suggested by ChatGPT 4o
+// the proofs of those properties were done by (Cursor) Claude Sonnet 3.5
+// including the decomposition into lemmas and the suggestion of the termination upper bound
 
 // translatio from Haskell
 type Literal = int
@@ -104,9 +107,6 @@ method Main()
   }
 }
 
-// properties to verify, suggested by ChatGPT
-
-// proved by Claude, with some hints from me
 lemma solveTerminatesHelper(p: Problem, fuel: nat)
   requires fuel >= problemSize(p) * 2
   ensures solve(fuel, p).Result?
