@@ -50,23 +50,24 @@ solve (c:p) = do
 // Solver with fuel parameter
 function solve(fuel: nat, p: Problem): SolveResult
 {
-  if fuel == 0 then FuelExhausted
-  else if p == [] then Result([ [] ]) // Base case: return an empty assignment
+  if p == [] then Result([ [] ]) // Base case: return an empty assignment
   else
     var c := p[0];
     var rest := p[1..];
 
     if c == [] then Result([]) // If there's an empty clause, no solution
     else
-      var l := c[0];
+      if fuel == 0 then FuelExhausted
+      else
+        var l := c[0];
 
-      match (solve(fuel - 1, propagate(l, rest)), solve(fuel - 1, propagate(-l, p)))
-      {
-        case (FuelExhausted, _) => FuelExhausted
-        case (_, FuelExhausted) => FuelExhausted
-        case (Result(posSolve), Result(negSolve)) =>
-          Result(appendAssignments(l, posSolve) + appendAssignments(-l, negSolve))
-      }
+        match (solve(fuel - 1, propagate(l, rest)), solve(fuel - 1, propagate(-l, p)))
+        {
+          case (FuelExhausted, _) => FuelExhausted
+          case (_, FuelExhausted) => FuelExhausted
+          case (Result(posSolve), Result(negSolve)) =>
+            Result(appendAssignments(l, posSolve) + appendAssignments(-l, negSolve))
+        }
 }
 // Helper function to append a literal to each assignment
 function appendAssignments(l: Literal, assignments: seq<Assignment>): seq<Assignment>
@@ -105,6 +106,95 @@ method Main()
 
 // properties to verify, suggested by ChatGPT
 
+lemma solveTerminatesHelper(p: Problem, fuel: nat)
+  requires fuel >= problemSize(p) * 2
+  ensures solve(fuel, p).Result?
+  decreases problemSize(p)
+{
+  if p == [] {
+    assert solve(fuel, p) == Result([[]]);
+  } else if p[0] == [] {
+    assert solve(fuel, p) == Result([]);
+  } else {
+    var l := p[0][0];
+    var rest := p[1..];
+    
+    propagateReduces(l, rest);
+    propagateReduces(-l, p);
+
+    assert problemSize(propagate(l, rest)) <= problemSize(rest);
+    assert problemSize(propagate(l, rest)) < problemSize(p);
+
+    assert problemSize(propagate(-l, p)) <= problemSize(p);
+    restReduces(p);
+    assert problemSize(rest) < problemSize(p);
+    assert problemSize(propagate(-l, p)) < problemSize(p);
+
+    var newFuel := fuel - 1;
+    assert newFuel >= problemSize(propagate(l, rest)) * 2;
+    assert newFuel >= problemSize(propagate(-l, p)) * 2;
+
+    solveTerminatesHelper(propagate(l, rest), newFuel);
+    solveTerminatesHelper(propagate(-l, p), newFuel);
+  }
+}
+function problemSize(p: Problem): nat
+{
+  if p == [] then 0
+  else |p[0]| + problemSize(p[1..])
+}
+lemma removeReduces(c: Clause, l: Literal)
+  ensures |remove(c, l)| <= |c|
+  ensures l in c ==> |remove(c, l)| < |c|
+{
+  if c != [] {
+    var rest := c[1..];
+    if c[0] == l {
+      removeReduces(rest, l);
+      assert |remove(c, l)| == |remove(rest, l)|;
+      assert |remove(c, l)| < |c|;
+    } else {
+      removeReduces(rest, l);
+      assert |remove(c, l)| == 1 + |remove(rest, l)|;
+    }
+  }
+}
+lemma restReduces(p: Problem)
+  requires p != [] && p[0] != []
+  ensures problemSize(p[1..]) < problemSize(p)
+{
+  assert problemSize(p) == |p[0]| + problemSize(p[1..]);
+  assert |p[0]| > 0;  // since p[0] != []
+}
+lemma propagateReduces(l: Literal, p: Problem)
+  ensures problemSize(propagate(l, p)) <= problemSize(p)
+  ensures p != [] && l in p[0] ==> problemSize(propagate(l, p)) < problemSize(p)
+  ensures p != [] && -l in p[0] ==> problemSize(propagate(l, p)) < problemSize(p)
+{
+  if p != [] {
+    var c := p[0];
+    var rest := p[1..];
+    
+    if l in c {
+      propagateReduces(l, rest);
+      assert problemSize(propagate(l, p)) == problemSize(propagate(l, rest));
+      assert problemSize(propagate(l, rest)) <= problemSize(rest);
+      assert problemSize(p) == |c| + problemSize(rest);
+      assert |c| > 0;  // since it contains l
+      assert problemSize(propagate(l, p)) < problemSize(p);
+    } else {
+      removeReduces(c, -l);
+      propagateReduces(l, rest);
+      assert |remove(c, -l)| <= |c|;
+      if -l in c {
+        assert |remove(c, -l)| < |c|;
+        assert problemSize(propagate(l, p)) < problemSize(p);
+      }
+    }
+  }
+}
+
+/*
 lemma solveSound(p: Problem)
   ensures match solve(10, p)
           case Result(assignments) => forall asg: Assignment :: asg in assignments ==> satisfies(p, asg)
@@ -125,9 +215,5 @@ lemma solveComplete(p: Problem)
 {
   // TODO: Proof
 }
+*/
 
-lemma solveTerminates(p: Problem)
-  ensures exists fuel: nat :: solve(fuel, p) != FuelExhausted
-{
-  // TODO: Proof
-}
