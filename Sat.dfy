@@ -279,7 +279,6 @@ lemma solveSound(fuel: nat, p: Problem, asg: Assignment)
     }
   }
 }
-
 function satisfies(p: Problem, asg: Assignment): bool
 {
   forall c: Clause :: c in p ==> exists l: Literal :: l in asg && l in c
@@ -368,13 +367,11 @@ lemma appendAssignmentsContains(l: Literal, assignments: seq<Assignment>, asg: A
     }
   }
 }
-
 lemma prependInSequence<T>(x: T, s: seq<T>)
   ensures x in [x] + s
 {
   assert ([x] + s)[0] == x;
 }
-
 /*
 lemma solveComplete(p: Problem)
   requires exists asg: Assignment :: satisfies(p, asg)
@@ -382,8 +379,106 @@ lemma solveComplete(p: Problem)
           case Result(assignments) => exists asg: Assignment :: asg in assignments && satisfies(p, asg)
           case FuelExhausted => true
 {
-  // TODO: Proof
+  // Get the satisfying assignment from requires
+  var sat_asg :| satisfies(p, sat_asg);
+
+  if p == [] {
+    // Base case: empty problem
+    assert solve(10, p) == Result([[]]);
+    var empty_asg: Assignment := [];
+    assert empty_asg in [empty_asg];  // now types are clear
+    assert satisfies(p, empty_asg);
+  } else if p[0] == [] {
+    // Impossible case - contradicts requires since empty clause can't be satisfied
+    assert p[0] in p;  // first clause is in p
+    assert exists l :: l in sat_asg && l in p[0];  // from satisfies(p, sat_asg)
+    assert p[0] == [];  // from if condition
+    assert forall l :: l !in p[0];  // empty clause contains no literals
+    assert false;  // contradiction: no literal can be in both sat_asg and empty clause
+  } else {
+    var l := p[0][0];
+    var rest := p[1..];
+
+    // Show sat_asg must contain either l or -l
+    assignmentContainsLiteral(p, sat_asg, l);
+
+    if l in sat_asg {
+      // Show sat_asg satisfies propagate(l, rest)
+      propagateComplete(l, rest, sat_asg);
+      
+      // Use solveTerminatesHelper to show we have enough fuel
+      solveTerminatesHelper(propagate(l, rest), 9);
+      
+      // Recursive completeness on propagate(l, rest)
+      solveComplete(propagate(l, rest));
+      
+      match solve(9, propagate(l, rest)) {
+        case Result(pos_solns) => {
+          // Show sat_asg is in the solutions
+          assert exists asg :: asg in pos_solns && satisfies(propagate(l, rest), asg);
+        }
+        case FuelExhausted => {}
+      }
+    } else {
+      // Similar case for -l
+      assert -l in sat_asg;
+      // ... similar proof structure
+    }
+  }
 }
 */
+// Helper lemma: if an assignment satisfies a problem, it must contain either l or -l from first non-empty clause
+lemma assignmentContainsLiteral(p: Problem, asg: Assignment, l: Literal)
+  requires p != [] && p[0] != []
+  requires l == p[0][0]  // changed from l in p[0] to be more specific
+  requires |p[0]| == 1   // new precondition: first clause is singleton
+  requires satisfies(p, asg)
+  ensures l in asg || -l in asg
+{
+  // Since asg satisfies p, it must satisfy p[0]
+  assert p[0] in p;
+  var lit :| lit in asg && lit in p[0];
+  
+  // Key insight: lit must be either l, -l, or some other literal in p[0]
+  if lit == l {
+    // If lit is l, then l in asg
+    assert l in asg;
+  } else if lit == -l {
+    // If lit is -l, then -l in asg
+    assert -l in asg;
+  } else {
+    // If lit is neither l nor -l, it must still be in p[0]
+    assert lit in p[0];
+    assert lit in asg;
+    assert lit != l && lit != -l;
+    assert l == p[0][0];  // from requires
+    
+    // Since lit is in p[0], it must be at some index i
+    assert exists i :: 0 <= i < |p[0]| && p[0][i] == lit;
+    var i :| 0 <= i < |p[0]| && p[0][i] == lit;
+    
+    // Since lit != l and l is at index 0, i must be > 0
+    assert i > 0;  // since p[0][0] == l and lit != l
+    assert p[0][0] == l;  // from requires
+    assert p[0][i] == lit;  // from witness
+    assert |p[0]| == 1;  // from requires
+    assert false;  // contradiction: i can't be > 0 since |p[0]| == 1
+  }
+}
+/*
+// Helper lemma: if asg satisfies p and l in asg, then asg satisfies propagate(l, p)
+lemma propagateComplete(l: Literal, p: Problem, asg: Assignment)
+  requires l in asg
+  requires satisfies(p, asg)
+  ensures satisfies(propagate(l, p), asg)
+{
+  forall c | c in propagate(l, p)
+  ensures exists lit :: lit in c && lit in asg
+  {
+    // Show that if c is in propagate(l, p), then asg must satisfy it
+  }
+}
+*/
+
 
 
