@@ -3,7 +3,7 @@
 
 // Features the pure lambda calculus, with optional extentions:
 // - booleans (BOOL),
-// - natural numebrs (NAT),
+// - natural numbers (NAT),
 // - iso-recursive types (REC).
 //
 // The extensions can be toggled commenting modular sections in and out,
