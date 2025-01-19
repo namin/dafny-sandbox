@@ -195,15 +195,91 @@ lemma propagateReduces(l: Literal, p: Problem)
   }
 }
 
-/*
 lemma solveSound(fuel: nat, p: Problem, asg: Assignment)
   requires match solve(fuel, p)
            case Result(assignments) => asg in assignments
            case FuelExhausted => false
   ensures satisfies(p, asg)
+  decreases fuel
 {
+  if p == [] {
+    assert solve(fuel, p) == Result([[]]);
+    assert asg == [];
+  } else if p[0] == [] {
+    assert solve(fuel, p) == Result([]);
+    assert false; // from requires since no assignments
+  } else if fuel == 0 {
+    assert solve(fuel, p) == FuelExhausted;
+    assert false; // from requires
+  } else {
+    var l := p[0][0];
+    var rest := p[1..];
+    
+    var pos_result := solve(fuel - 1, propagate(l, rest));
+    var neg_result := solve(fuel - 1, propagate(-l, p));
+    match pos_result {
+      case Result(pos_solns) => {
+        match neg_result {
+          case Result(neg_solns) => {
+            var all_solns := appendAssignments(l, pos_solns) + appendAssignments(-l, neg_solns);
+            assert asg in all_solns;  // from requires
+            
+            if asg in appendAssignments(l, pos_solns) {
+              // Case 1: asg came from positive branch
+              appendAssignmentsContains(l, pos_solns, asg);
+              var pos_asg :| asg == [l] + pos_asg && pos_asg in pos_solns;
+              
+              // Use recursive soundness on pos_asg
+              solveSound(fuel-1, propagate(l, rest), pos_asg);
+              assert satisfies(propagate(l, rest), pos_asg);
+              
+              // Show l in asg using prependInSequence
+              prependInSequence(l, pos_asg);
+              assert l in asg;  // since asg == [l] + pos_asg
+              
+              // Use propagateSoundness with asg (not pos_asg)
+              propagateSoundness(l, rest, asg);
+              assert satisfies(rest, asg);
+              
+              // Now show that asg satisfies p
+              forall c | c in p 
+              ensures exists lit :: lit in c && lit in asg {
+                if c == p[0] {
+                  // First clause - l satisfies it since l in asg
+                  assert l in c;  // since l == c[0]
+                  assert l in asg;
+                } else {
+                  // Other clauses - use satisfies(rest, asg)
+                  assert c in rest;
+                  var lit :| lit in c && lit in asg;
+                }
+              }
+            } else {
+              // Case 2: asg came from negative branch
+              appendAssignmentsContains(-l, neg_solns, asg);
+              var neg_asg :| asg == [-l] + neg_asg && neg_asg in neg_solns;
+              
+              // Use recursive soundness on neg_asg
+              solveSound(fuel-1, propagate(-l, p), neg_asg);
+              assert satisfies(propagate(-l, p), neg_asg);
+              
+              // Show -l in asg using prependInSequence
+              prependInSequence(-l, neg_asg);
+              assert -l in asg;  // since asg == [-l] + neg_asg
+              
+              // Use propagateSoundness with asg (not neg_asg)
+              propagateSoundness(-l, p, asg);
+              assert satisfies(p, asg);
+            }
+          }
+          case FuelExhausted => { assert false; }
+        }
+      }
+      case FuelExhausted => { assert false; }
+    }
+  }
 }
-*/
+
 function satisfies(p: Problem, asg: Assignment): bool
 {
   forall c: Clause :: c in p ==> exists l: Literal :: l in asg && l in c
@@ -270,6 +346,33 @@ lemma appendAssignmentsSoundness(l: Literal, asg: Assignment, p: Problem)
     var lit :| lit in c && lit in asg;  // from requires
     assert lit in [l] + asg;  // since asg is a suffix of [l] + asg
   }
+}
+
+lemma appendAssignmentsContains(l: Literal, assignments: seq<Assignment>, asg: Assignment)
+  requires asg in appendAssignments(l, assignments)
+  ensures exists orig :: asg == [l] + orig && orig in assignments
+{
+  if assignments != [] {
+    var first := assignments[0];
+    var rest := assignments[1..];
+    if asg == [l] + first {
+      // Found it in first element
+      assert first in assignments;  // since first == assignments[0]
+      assert asg == [l] + first;   // from if condition
+    } else {
+      // Must be in rest
+      assert asg in appendAssignments(l, rest);  // from definition of appendAssignments
+      appendAssignmentsContains(l, rest, asg);
+      var orig :| asg == [l] + orig && orig in rest;
+      assert orig in assignments;  // since rest is a subsequence of assignments
+    }
+  }
+}
+
+lemma prependInSequence<T>(x: T, s: seq<T>)
+  ensures x in [x] + s
+{
+  assert ([x] + s)[0] == x;
 }
 
 /*
