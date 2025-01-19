@@ -102,3 +102,32 @@ method Main()
       print "No solutions found: ", assignments, "\n";
   }
 }
+
+// properties to verify, suggested by ChatGPT
+
+lemma solveSound(p: Problem)
+  ensures match solve(10, p)
+          case Result(assignments) => forall asg: Assignment :: asg in assignments ==> satisfies(p, asg)
+          case FuelExhausted => true
+{
+  // TODO: Proof
+}
+function satisfies(p: Problem, asg: Assignment): bool
+{
+  forall c: Clause :: c in p ==> exists l: Literal :: l in asg && l in c
+}
+
+lemma solveComplete(p: Problem)
+  requires exists asg: Assignment :: satisfies(p, asg)
+  ensures match solve(10, p)
+          case Result(assignments) => exists asg: Assignment :: asg in assignments && satisfies(p, asg)
+          case FuelExhausted => true
+{
+  // TODO: Proof
+}
+
+lemma solveTerminates(p: Problem)
+  ensures exists fuel: nat :: solve(fuel, p) != FuelExhausted
+{
+  // TODO: Proof
+}
