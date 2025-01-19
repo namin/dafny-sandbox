@@ -106,6 +106,7 @@ method Main()
 
 // properties to verify, suggested by ChatGPT
 
+// proved by Claude, with some hints from me
 lemma solveTerminatesHelper(p: Problem, fuel: nat)
   requires fuel >= problemSize(p) * 2
   ensures solve(fuel, p).Result?
