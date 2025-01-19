@@ -196,18 +196,78 @@ lemma propagateReduces(l: Literal, p: Problem)
 }
 
 /*
-lemma solveSound(p: Problem)
-  ensures match solve(10, p)
-          case Result(assignments) => forall asg: Assignment :: asg in assignments ==> satisfies(p, asg)
-          case FuelExhausted => true
+lemma solveSound(fuel: nat, p: Problem, asg: Assignment)
+  requires match solve(fuel, p)
+           case Result(assignments) => asg in assignments
+           case FuelExhausted => false
+  ensures satisfies(p, asg)
 {
-  // TODO: Proof
 }
+*/
 function satisfies(p: Problem, asg: Assignment): bool
 {
   forall c: Clause :: c in p ==> exists l: Literal :: l in asg && l in c
 }
+// Helper lemma 1: If an assignment satisfies a propagated problem and contains the propagated literal,
+// then it satisfies the original problem
+lemma propagateSoundness(l: Literal, p: Problem, asg: Assignment)
+  requires l in asg  // assignment contains the literal we propagated
+  requires satisfies(propagate(l, p), asg)
+  ensures satisfies(p, asg)
+{
+  forall c | c in p 
+  ensures exists lit :: lit in c && lit in asg
+  {
+    if l !in c {
+      propagateContains(l, p, c);
+      var lit :| lit in remove(c, -l) && lit in asg;
+      removeContains(c, -l, lit);
+    }
+  }
+}
+lemma removeContains(c: Clause, l: Literal, x: Literal)
+  requires x in remove(c, l)
+  ensures x in c && x != l
+{
+  if c != [] {
+    var rest := c[1..];
+    if c[0] == l {
+      removeContains(rest, l, x);
+    } else {
+      if x == c[0] {
+        assert x in c;
+        assert x != l;  // since c[0] != l
+      } else {
+        removeContains(rest, l, x);
+      }
+    }
+  }
+}
+lemma propagateContains(l: Literal, p: Problem, c: Clause)
+  requires c in p
+  requires l !in c
+  ensures remove(c, -l) in propagate(l, p)
+  decreases p
+{
+  if p != [] {
+    if c == p[0] {
+      // Base case: c is the first clause
+      assert remove(c, -l) == propagate(l, p)[0];
+    } else {
+      // Recursive case: c is in the rest of p
+      propagateContains(l, p[1..], c);
+    }
+  }
+}
 
+/*
+// Helper lemma 2: Appending a literal preserves soundness for a specific assignment
+lemma appendAssignmentsSoundness(l: Literal, asg: Assignment, p: Problem) 
+  requires satisfies(p, asg)
+  ensures satisfies(p, [l] + asg)
+*/
+
+/*
 lemma solveComplete(p: Problem)
   requires exists asg: Assignment :: satisfies(p, asg)
   ensures match solve(10, p)
@@ -217,4 +277,5 @@ lemma solveComplete(p: Problem)
   // TODO: Proof
 }
 */
+
 
