@@ -90,7 +90,7 @@ function appendAssignments(l: Literal, assignments: seq<Assignment>): seq<Assign
 }
 
 // end-to-end solve
-method Main()
+method MainExamples()
 {
   var problem1 := [[Pos(1), Neg(2)], [Neg(1), Pos(2)], [Pos(2), Pos(3)], [Neg(3)]];
   var result1 := solve(10, problem1); // Use sufficient fuel
@@ -314,180 +314,41 @@ lemma solveComplete(p: Problem, sat_asg: Assignment)
   requires satisfies(p, sat_asg)
   requires isConsistent(sat_asg)
   ensures match solve(problemSize(p) * 2, p)
-          case Result(assignments) => exists asg :: asg in assignments && satisfies(p, asg)
-          case FuelExhausted => false
-  ensures match solve(problemSize(p) * 2, p)
-          case Result(assignments) => sat_asg in assignments
+          case Result(assignments) => toSet(sat_asg) in set asg | asg in assignments :: toSet(asg)
           case FuelExhausted => false
   ensures forall asg, l :: satisfies(p, asg) && l in asg ==> satisfies(propagate(l, p), asg)
   decreases problemSize(p)
 {
-  solveTerminatesHelper(p, problemSize(p) * 2);
-  
-  if p == [] {
-    var empty_asg: Assignment := [];
-    assert solve(problemSize(p) * 2, p) == Result([empty_asg]);
-    assert empty_asg in [empty_asg];
-    assert satisfies(p, empty_asg);
-    // For second ensures: empty problem case is trivial
-    assert forall asg, l :: satisfies([], asg) && l in asg ==> satisfies(propagate(l, []), asg);
-  } else if p[0] == [] {
-    // Impossible case - contradicts requires since empty clause can't be satisfied
-    assert p[0] in p;  // first clause is in p
-    assert exists l :: l in sat_asg && l in p[0];  // from satisfies(p, sat_asg)
-    assert p[0] == [];  // from if condition
-    assert false;  // contradiction: no literal can be in both sat_asg and empty clause
-  } else {
-    var l := p[0][0];
-    var rest := p[1..];
-    
-    // Show problem size decreases
-    propagateReduces(l, rest);
-    propagateReduces(negate(l), p);
-    
-    if l in sat_asg {
-      // First, prove sat_asg satisfies propagate(l, rest)
-      forall c | c in propagate(l, rest)
-      ensures exists lit :: lit in c && lit in sat_asg
-      {
-        // Find original clause
-        propagateHasOriginal(l, rest, c);
-        var orig_c :| orig_c in rest && l !in orig_c && c == remove(orig_c, negate(l));
-        
-        // Since sat_asg satisfies orig_c (it's in rest), find satisfying literal
-        assert orig_c in rest;  // from propagateHasOriginal
-        assert rest == p[1..];  // explicit connection
-        assert orig_c in p;     // since rest is p[1..] and thus part of p
-        assert exists lit :: lit in orig_c && lit in sat_asg;  // from satisfies(p, sat_asg)
-        var lit :| lit in orig_c && lit in sat_asg;
-        
-        // If lit != negate(l), it survives remove
-        if lit != negate(l) {
-          removePreservesNonMatch(orig_c, negate(l), lit);
-          assert lit in c && lit in sat_asg;
+}
+function toSet(asg: Assignment): set<Literal>
+{
+  set x | x in asg :: x
+}
+method Main() // Counterexample to naive statement of completeness
+{
+    var p := [[Pos(1)], [Pos(2)]];  // Problem requiring both Pos(1) and Pos(2)
+    var sat_asg := [Pos(2), Pos(1)];  // Valid satisfying assignment but in different order
+    var sat := solve(problemSize(p) * 2, p);
+    match sat {
+      case Result(assignments) => {
+        print assignments;
+        if assignments == [] {
+          print "No solutions found";
         } else {
-          // If lit == negate(l), we need to find another literal
-          assert l == negate(lit);  // from if condition
-          
-          // Since sat_asg satisfies orig_c and l is in sat_asg,
-          // there must be another literal in orig_c that's in sat_asg
-          // (because negate(l) can't be in sat_asg when l is)
-          assert l in sat_asg;  // from if condition
-          assert negate(l) !in sat_asg;  // since l in sat_asg
-          assert exists other :: other in orig_c && other in sat_asg && other != negate(l);
-          var other :| other in orig_c && other in sat_asg && other != negate(l);
-          
-          removePreservesNonMatch(orig_c, negate(l), other);
-          assert other in c && other in sat_asg;
-        }
-      }
-      assert satisfies(propagate(l, rest), sat_asg);
-      
-      // Now use recursive call
-      solveComplete(propagate(l, rest), sat_asg);
-      
-      // Get solution from recursive call
-      var pos_result := solve(problemSize(p) * 2 - 1, propagate(l, rest));
-      match pos_result {
-        case Result(pos_solns) => {
-          var pos_asg :| pos_asg in pos_solns && satisfies(propagate(l, rest), pos_asg);
-          assert [l] + pos_asg in appendAssignments(l, pos_solns);
-          propagateSoundness(l, rest, [l] + pos_asg);
-          assert satisfies(p, [l] + pos_asg);
-          
-          // Use helper lemma to show solution is in final result
-          var neg_result := solve(problemSize(p) * 2 - 1, propagate(negate(l), p));
-          match neg_result {
-            case Result(neg_solns) => {
-              // We need to remove negate(l) from sat_asg for the recursive call
-              var smaller_asg := remove(sat_asg, negate(l));
-              removePreservesConsistency(sat_asg, negate(l));
-              assert isConsistent(smaller_asg);
-              assert smaller_asg in neg_solns;  // from recursive call
-              assert [negate(l)] + smaller_asg in appendAssignments(negate(l), neg_solns);  // changed sat_asg to smaller_asg
-              var pos_result := solve(problemSize(p) * 2 - 1, propagate(l, rest));
-              match pos_result {
-                case Result(pos_solns) => {
-                  solveReturnsResult(p, l, pos_solns, neg_solns, [negate(l)] + smaller_asg);
-                  propagatePreservesSatisfaction(p, sat_asg, pos_solns);
-                }
-                case FuelExhausted => assert false;
-              }
-            }
-            case FuelExhausted => assert false;
+          print "Solutions: ", assignments;
+          if |assignments| == 1 {
+            print "Solution: ", assignments[0];
+            print assignments[0] == sat_asg;
+            print toSet(assignments[0]) == toSet(sat_asg);
+          } else {
+            print "Multiple solutions found";
           }
         }
-        case FuelExhausted => assert false;
       }
-    } else {
-      // First, prove sat_asg satisfies propagate(negate(l), p)
-      propagateSatisfactionLemma(negate(l), p, sat_asg);
-      assert satisfies(propagate(negate(l), p), sat_asg);
-
-      // Create smaller assignment before recursive call
-      var smaller_asg := remove(sat_asg, negate(l));
-      removePreservesConsistency(sat_asg, negate(l));
-      assert isConsistent(smaller_asg);
-
-      // Prove smaller_asg satisfies propagate(negate(l), p)
-      propagateSatisfactionLemma(negate(l), p, smaller_asg);
-      assert satisfies(propagate(negate(l), p), smaller_asg);
-
-      // Now use recursive call with smaller_asg
-      solveComplete(propagate(negate(l), p), smaller_asg);
-      
-      // Get solution from recursive call
-      var neg_result := solve(problemSize(p) * 2 - 1, propagate(negate(l), p));
-      match neg_result {
-        case Result(neg_solns) => {
-          // Connect recursive call result with neg_solns using fuel monotonicity
-          assert solve(problemSize(propagate(negate(l), p)) * 2, propagate(negate(l), p)).Result?;  // from recursive call
-          assert smaller_asg in solve(problemSize(propagate(negate(l), p)) * 2, propagate(negate(l), p)).assignments;  // from recursive call
-          propagateReduces(negate(l), p);
-          assert problemSize(propagate(negate(l), p)) <= problemSize(p);
-          assert problemSize(propagate(negate(l), p)) * 2 <= problemSize(p) * 2 - 1;
-          solveFuelMonotonic(propagate(negate(l), p), problemSize(propagate(negate(l), p)) * 2, problemSize(p) * 2 - 1);
-          assert smaller_asg in neg_solns;  // from fuel monotonicity
-          
-          // Use helper lemma to show solution is in final result
-          var pos_result := solve(problemSize(p) * 2 - 1, propagate(l, rest));
-          match pos_result {
-            case Result(pos_solns) => {
-              // Show that neg_solns comes from the recursive call
-              assert solve(problemSize(p) * 2 - 1, propagate(negate(l), p)) == Result(neg_solns);
-              
-              // Since smaller_asg is in neg_solns, sat_asg will be in the final result
-              appendAssignmentsIncludes(negate(l), neg_solns, smaller_asg);
-              assert [negate(l)] + smaller_asg in appendAssignments(negate(l), neg_solns);
-              
-              // Prove first postcondition - exists a satisfying assignment
-              assert [negate(l)] + smaller_asg in solve(problemSize(p) * 2, p).assignments;
-              assert satisfies(p, [negate(l)] + smaller_asg);
-              
-              // Prove second postcondition - sat_asg is in assignments
-              // TODO: Need to prove sat_asg is in the solution set
-              
-              // Prove third postcondition - propagate preserves satisfaction
-              forall asg, lit | satisfies(p, asg) && lit in asg 
-              ensures satisfies(propagate(lit, p), asg)
-              {
-                assert lit in asg;  // from forall condition
-                assert isConsistent(asg);  // we need to prove this - how do we know it?
-                propagateSatisfactionPreservation(p, asg, lit);
-                assert satisfies(propagate(lit, p), asg);  // from propagateSatisfactionPreservation
-                propagateSoundness(lit, p, asg);
-              }
-              
-              solveReturnsResult(p, l, pos_solns, neg_solns, [negate(l)] + smaller_asg);
-              propagatePreservesSatisfaction(p, sat_asg, pos_solns);
-            }
-            case FuelExhausted => assert false;
-          }
-        }
-        case FuelExhausted => assert false;
+      case FuelExhausted => {
+        print "Fuel exhausted";
       }
     }
-  }
 }
 
 // ## Helper Lemmas
@@ -875,39 +736,4 @@ lemma appendAssignmentsIncludes(l: Literal, assignments: seq<Assignment>, asg: A
   }
 }
 
-lemma propagateSatisfactionPreservation(p: Problem, asg: Assignment, lit: Literal)
-  requires satisfies(p, asg)
-  requires lit in asg
-  ensures satisfies(propagate(lit, p), asg)
-{
-  forall c | c in propagate(lit, p)
-  ensures exists l :: l in c && l in asg
-  {
-    // Find original clause that c came from
-    propagateHasOriginal(lit, p, c);
-    var orig_c :| orig_c in p && lit !in orig_c && c == remove(orig_c, negate(lit));
-    
-    // Since asg satisfies orig_c, find satisfying literal
-    assert orig_c in p;  // from propagateHasOriginal
-    assert exists l :: l in orig_c && l in asg;  // since asg satisfies p
-    var l :| l in orig_c && l in asg;
-    
-    if l != negate(lit) {
-      // If l != negate(lit), it survives removal
-      removePreservesNonMatch(orig_c, negate(lit), l);
-      assert l in c && l in asg;
-    } else {
-      // If l == negate(lit), we can use lit itself
-      // We know:
-      // - lit is in asg (from requires)
-      // - c is remove(orig_c, negate(lit))
-      // - lit !in orig_c (from propagateHasOriginal)
-      // Therefore lit satisfies c, since it's in asg and can't be removed
-      assert lit in asg;  // from requires
-      assert lit !in orig_c;  // from propagateHasOriginal
-      assert lit != negate(lit);  // property of negate
-      assert lit in c && lit in asg;  // since lit wasn't in orig_c, it wasn't removed
-    }
-  }
-}
 
