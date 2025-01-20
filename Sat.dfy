@@ -399,19 +399,16 @@ lemma solveComplete(p: Problem, sat_asg: Assignment)
           var neg_result := solve(problemSize(p) * 2 - 1, propagate(negate(l), p));
           match neg_result {
             case Result(neg_solns) => {
-              // Need to prove: problemSize(p) * 2 - 1 >= problemSize(propagate(negate(l), p)) * 2
-              propagateReduces(negate(l), p);
-              assert problemSize(propagate(negate(l), p)) <= problemSize(p);
-              
-              // Use fuel monotonicity in the other direction
-              solveFuelMonotonic(propagate(negate(l), p), problemSize(propagate(negate(l), p)) * 2, problemSize(p) * 2 - 1);
-              assert sat_asg in neg_solns;  // from fuel monotonicity
-              
-              assert [negate(l)] + sat_asg in appendAssignments(negate(l), neg_solns);
+              // We need to remove negate(l) from sat_asg for the recursive call
+              var smaller_asg := remove(sat_asg, negate(l));
+              removePreservesConsistency(sat_asg, negate(l));
+              assert isConsistent(smaller_asg);
+              assert smaller_asg in neg_solns;  // from recursive call
+              assert [negate(l)] + smaller_asg in appendAssignments(negate(l), neg_solns);  // changed sat_asg to smaller_asg
               var pos_result := solve(problemSize(p) * 2 - 1, propagate(l, rest));
               match pos_result {
                 case Result(pos_solns) => {
-                  solveReturnsResult(p, l, pos_solns, neg_solns, [negate(l)] + sat_asg);
+                  solveReturnsResult(p, l, pos_solns, neg_solns, [negate(l)] + smaller_asg);
                   propagatePreservesSatisfaction(p, sat_asg, pos_solns);
                 }
                 case FuelExhausted => assert false;
@@ -427,23 +424,43 @@ lemma solveComplete(p: Problem, sat_asg: Assignment)
       propagateSatisfactionLemma(negate(l), p, sat_asg);
       assert satisfies(propagate(negate(l), p), sat_asg);
 
-      // Now use recursive call
-      solveComplete(propagate(negate(l), p), sat_asg);
+      // Create smaller assignment before recursive call
+      var smaller_asg := remove(sat_asg, negate(l));
+      removePreservesConsistency(sat_asg, negate(l));
+      assert isConsistent(smaller_asg);
+
+      // Prove smaller_asg satisfies propagate(negate(l), p)
+      propagateSatisfactionLemma(negate(l), p, smaller_asg);
+      assert satisfies(propagate(negate(l), p), smaller_asg);
+
+      // Now use recursive call with smaller_asg
+      solveComplete(propagate(negate(l), p), smaller_asg);
       
       // Get solution from recursive call
       var neg_result := solve(problemSize(p) * 2 - 1, propagate(negate(l), p));
       match neg_result {
         case Result(neg_solns) => {
+          // Connect recursive call result with neg_solns using fuel monotonicity
+          assert solve(problemSize(propagate(negate(l), p)) * 2, propagate(negate(l), p)).Result?;  // from recursive call
+          assert smaller_asg in solve(problemSize(propagate(negate(l), p)) * 2, propagate(negate(l), p)).assignments;  // from recursive call
+          propagateReduces(negate(l), p);
+          assert problemSize(propagate(negate(l), p)) <= problemSize(p);
+          assert problemSize(p) * 2 - 1 >= problemSize(propagate(negate(l), p)) * 2;
+          solveFuelMonotonic(propagate(negate(l), p), problemSize(propagate(negate(l), p)) * 2, problemSize(p) * 2 - 1);
+          assert smaller_asg in neg_solns;  // from fuel monotonicity
+          
           // Use helper lemma to show solution is in final result
           var pos_result := solve(problemSize(p) * 2 - 1, propagate(l, rest));
           match pos_result {
             case Result(pos_solns) => {
               // Show that neg_solns comes from the recursive call
               assert solve(problemSize(p) * 2 - 1, propagate(negate(l), p)) == Result(neg_solns);  // from neg_result match
-              assert sat_asg in neg_solns;  // from recursive call's ensures clause
               prependInSequence(negate(l), sat_asg);  // proves negate(l) in [negate(l)] + sat_asg
-              assert [negate(l)] + sat_asg in appendAssignments(negate(l), neg_solns);  // from definition of appendAssignments
-              solveReturnsResult(p, l, pos_solns, neg_solns, [negate(l)] + sat_asg);
+              // Use appendAssignmentsContains to prove the assignment is in appendAssignments
+              assert smaller_asg in neg_solns;  // restate for clarity
+              assert exists orig :: [negate(l)] + smaller_asg == [negate(l)] + orig && orig in neg_solns;  // from definition of appendAssignments
+              assert [negate(l)] + smaller_asg in appendAssignments(negate(l), neg_solns);  // from definition of appendAssignments
+              solveReturnsResult(p, l, pos_solns, neg_solns, [negate(l)] + smaller_asg);
               propagatePreservesSatisfaction(p, sat_asg, pos_solns);
             }
             case FuelExhausted => assert false;
@@ -801,5 +818,23 @@ lemma solveFuelMonotonic(p: Problem, fuel1: nat, fuel2: nat)
     
     solveFuelMonotonic(propagate(l, rest), fuel1 - 1, fuel2 - 1);
     solveFuelMonotonic(propagate(negate(l), p), fuel1 - 1, fuel2 - 1);
+  }
+}
+
+// Add this helper lemma
+lemma removePreservesConsistency(asg: Assignment, l: Literal)
+  requires isConsistent(asg)
+  ensures isConsistent(remove(asg, l))
+{
+  forall x | x in remove(asg, l)
+  ensures negate(x) !in remove(asg, l)
+  {
+    removeContains(asg, l, x);
+    assert x in asg && x != l;
+    if negate(x) in remove(asg, l) {
+      removeContains(asg, l, negate(x));
+      assert negate(x) in asg;
+      assert false;  // contradicts isConsistent(asg)
+    }
   }
 }
