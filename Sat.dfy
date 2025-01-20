@@ -445,7 +445,7 @@ lemma solveComplete(p: Problem, sat_asg: Assignment)
           assert smaller_asg in solve(problemSize(propagate(negate(l), p)) * 2, propagate(negate(l), p)).assignments;  // from recursive call
           propagateReduces(negate(l), p);
           assert problemSize(propagate(negate(l), p)) <= problemSize(p);
-          assert problemSize(p) * 2 - 1 >= problemSize(propagate(negate(l), p)) * 2;
+          assert problemSize(propagate(negate(l), p)) * 2 <= problemSize(p) * 2 - 1;  // fixed fuel comparison
           solveFuelMonotonic(propagate(negate(l), p), problemSize(propagate(negate(l), p)) * 2, problemSize(p) * 2 - 1);
           assert smaller_asg in neg_solns;  // from fuel monotonicity
           
@@ -456,10 +456,8 @@ lemma solveComplete(p: Problem, sat_asg: Assignment)
               // Show that neg_solns comes from the recursive call
               assert solve(problemSize(p) * 2 - 1, propagate(negate(l), p)) == Result(neg_solns);  // from neg_result match
               prependInSequence(negate(l), sat_asg);  // proves negate(l) in [negate(l)] + sat_asg
-              // Use appendAssignmentsContains to prove the assignment is in appendAssignments
-              assert smaller_asg in neg_solns;  // restate for clarity
-              assert exists orig :: [negate(l)] + smaller_asg == [negate(l)] + orig && orig in neg_solns;  // from definition of appendAssignments
-              assert [negate(l)] + smaller_asg in appendAssignments(negate(l), neg_solns);  // from definition of appendAssignments
+              appendAssignmentsIncludes(negate(l), neg_solns, smaller_asg);
+              assert [negate(l)] + smaller_asg in appendAssignments(negate(l), neg_solns);
               solveReturnsResult(p, l, pos_solns, neg_solns, [negate(l)] + smaller_asg);
               propagatePreservesSatisfaction(p, sat_asg, pos_solns);
             }
@@ -835,6 +833,24 @@ lemma removePreservesConsistency(asg: Assignment, l: Literal)
       removeContains(asg, l, negate(x));
       assert negate(x) in asg;
       assert false;  // contradicts isConsistent(asg)
+    }
+  }
+}
+
+lemma appendAssignmentsIncludes(l: Literal, assignments: seq<Assignment>, asg: Assignment)
+  requires asg in assignments
+  ensures [l] + asg in appendAssignments(l, assignments)
+{
+  if assignments != [] {
+    var first := assignments[0];
+    var rest := assignments[1..];
+    if asg == first {
+      assert [l] + asg == [[l] + first][0];
+      assert [[l] + first][0] in appendAssignments(l, assignments);
+    } else {
+      appendAssignmentsIncludes(l, rest, asg);
+      assert [l] + asg in appendAssignments(l, rest);
+      assert appendAssignments(l, assignments) == [[l] + first] + appendAssignments(l, rest);
     }
   }
 }
