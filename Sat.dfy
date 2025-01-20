@@ -445,7 +445,7 @@ lemma solveComplete(p: Problem, sat_asg: Assignment)
           assert smaller_asg in solve(problemSize(propagate(negate(l), p)) * 2, propagate(negate(l), p)).assignments;  // from recursive call
           propagateReduces(negate(l), p);
           assert problemSize(propagate(negate(l), p)) <= problemSize(p);
-          assert problemSize(propagate(negate(l), p)) * 2 <= problemSize(p) * 2 - 1;  // fixed fuel comparison
+          assert problemSize(propagate(negate(l), p)) * 2 <= problemSize(p) * 2 - 1;
           solveFuelMonotonic(propagate(negate(l), p), problemSize(propagate(negate(l), p)) * 2, problemSize(p) * 2 - 1);
           assert smaller_asg in neg_solns;  // from fuel monotonicity
           
@@ -454,10 +454,29 @@ lemma solveComplete(p: Problem, sat_asg: Assignment)
           match pos_result {
             case Result(pos_solns) => {
               // Show that neg_solns comes from the recursive call
-              assert solve(problemSize(p) * 2 - 1, propagate(negate(l), p)) == Result(neg_solns);  // from neg_result match
-              prependInSequence(negate(l), sat_asg);  // proves negate(l) in [negate(l)] + sat_asg
+              assert solve(problemSize(p) * 2 - 1, propagate(negate(l), p)) == Result(neg_solns);
+              
+              // Since smaller_asg is in neg_solns, sat_asg will be in the final result
               appendAssignmentsIncludes(negate(l), neg_solns, smaller_asg);
               assert [negate(l)] + smaller_asg in appendAssignments(negate(l), neg_solns);
+              
+              // Prove first postcondition - exists a satisfying assignment
+              assert [negate(l)] + smaller_asg in solve(problemSize(p) * 2, p).assignments;
+              assert satisfies(p, [negate(l)] + smaller_asg);
+              
+              // Prove second postcondition - sat_asg is in assignments
+              // TODO: Need to prove sat_asg is in the solution set
+              
+              // Prove third postcondition - propagate preserves satisfaction
+              forall asg, lit | satisfies(p, asg) && lit in asg 
+              ensures satisfies(propagate(lit, p), asg)
+              {
+                assert lit in asg;  // from forall condition
+                propagateSatisfactionPreservation(p, asg, lit);
+                assert satisfies(propagate(lit, p), asg);  // from propagateSatisfactionPreservation
+                propagateSoundness(lit, p, asg);
+              }
+              
               solveReturnsResult(p, l, pos_solns, neg_solns, [negate(l)] + smaller_asg);
               propagatePreservesSatisfaction(p, sat_asg, pos_solns);
             }
@@ -854,3 +873,36 @@ lemma appendAssignmentsIncludes(l: Literal, assignments: seq<Assignment>, asg: A
     }
   }
 }
+
+lemma propagateSatisfactionPreservation(p: Problem, asg: Assignment, lit: Literal)
+  requires satisfies(p, asg)
+  requires lit in asg
+  requires isConsistent(asg)
+  ensures satisfies(propagate(lit, p), asg)
+{
+  forall c | c in propagate(lit, p)
+  ensures exists l :: l in c && l in asg
+  {
+    // Find original clause that c came from
+    propagateHasOriginal(lit, p, c);
+    var orig_c :| orig_c in p && lit !in orig_c && c == remove(orig_c, negate(lit));
+    
+    // Since asg satisfies orig_c, find satisfying literal
+    assert orig_c in p;  // from propagateHasOriginal
+    assert exists l :: l in orig_c && l in asg;  // since asg satisfies p
+    var l :| l in orig_c && l in asg;
+    
+    if l != negate(lit) {
+      // If l != negate(lit), it survives removal
+      removePreservesNonMatch(orig_c, negate(lit), l);
+      assert l in c && l in asg;
+    } else {
+      // If l == negate(lit), we need another literal
+      assert l == negate(lit);
+      assert negate(lit) in asg;  // since l in asg
+      assert lit in asg;  // from requires
+      assert false;  // contradiction: both lit and negate(lit) in asg
+    }
+  }
+}
+
