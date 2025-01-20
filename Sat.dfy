@@ -316,6 +316,9 @@ lemma solveComplete(p: Problem, sat_asg: Assignment)
   ensures match solve(problemSize(p) * 2, p)
           case Result(assignments) => exists asg :: asg in assignments && satisfies(p, asg)
           case FuelExhausted => false
+  ensures match solve(problemSize(p) * 2, p)
+          case Result(assignments) => sat_asg in assignments
+          case FuelExhausted => false
   ensures forall asg, l :: satisfies(p, asg) && l in asg ==> satisfies(propagate(l, p), asg)
   decreases problemSize(p)
 {
@@ -352,8 +355,10 @@ lemma solveComplete(p: Problem, sat_asg: Assignment)
         var orig_c :| orig_c in rest && l !in orig_c && c == remove(orig_c, negate(l));
         
         // Since sat_asg satisfies orig_c (it's in rest), find satisfying literal
-        assert orig_c in p[1..];  // since orig_c in rest
-        assert exists lit :: lit in orig_c && lit in sat_asg;
+        assert orig_c in rest;  // from propagateHasOriginal
+        assert rest == p[1..];  // explicit connection
+        assert orig_c in p;     // since rest is p[1..] and thus part of p
+        assert exists lit :: lit in orig_c && lit in sat_asg;  // from satisfies(p, sat_asg)
         var lit :| lit in orig_c && lit in sat_asg;
         
         // If lit != negate(l), it survives remove
@@ -394,8 +399,10 @@ lemma solveComplete(p: Problem, sat_asg: Assignment)
           var neg_result := solve(problemSize(p) * 2 - 1, propagate(negate(l), p));
           match neg_result {
             case Result(neg_solns) => {
-              solveReturnsResult(p, l, pos_solns, neg_solns, [l] + pos_asg);
-              propagatePreservesSatisfaction(p, sat_asg, neg_solns);
+              assert sat_asg in neg_solns;  // from recursive call
+              assert [negate(l)] + sat_asg in appendAssignments(negate(l), neg_solns);  // from definition of appendAssignments
+              solveReturnsResult(p, l, pos_solns, neg_solns, [negate(l)] + sat_asg);
+              propagatePreservesSatisfaction(p, sat_asg, pos_solns);
             }
             case FuelExhausted => assert false;
           }
@@ -404,33 +411,9 @@ lemma solveComplete(p: Problem, sat_asg: Assignment)
       }
     } else {
       // First, prove sat_asg satisfies propagate(negate(l), p)
-      forall c | c in propagate(negate(l), p)
-      ensures exists lit :: lit in c && lit in sat_asg
-      {
-        // Find original clause
-        propagateHasOriginal(negate(l), p, c);
-        var orig_c :| orig_c in p && negate(l) !in orig_c && c == remove(orig_c, l);
-        
-        // Since sat_asg satisfies orig_c, find satisfying literal
-        assert orig_c in p;  // from propagateHasOriginal
-        assert exists lit :: lit in orig_c && lit in sat_asg;  // since satisfies(p, sat_asg)
-        var lit :| lit in orig_c && lit in sat_asg;
-        
-        // If lit != l, it survives remove
-        if lit != l {
-          removePreservesNonMatch(orig_c, l, lit);
-          assert lit in c && lit in sat_asg;
-        } else {
-          // If lit == l, we need to find another literal
-          // But this case is impossible since l !in sat_asg
-          assert lit in sat_asg;  // from above
-          assert lit == l;  // from if condition
-          assert l !in sat_asg;  // from branch condition
-          assert false;  // contradiction
-        }
-      }
+      propagateSatisfactionLemma(negate(l), p, sat_asg);
       assert satisfies(propagate(negate(l), p), sat_asg);
-      
+
       // Now use recursive call
       solveComplete(propagate(negate(l), p), sat_asg);
       
@@ -438,16 +421,16 @@ lemma solveComplete(p: Problem, sat_asg: Assignment)
       var neg_result := solve(problemSize(p) * 2 - 1, propagate(negate(l), p));
       match neg_result {
         case Result(neg_solns) => {
-          var neg_asg :| neg_asg in neg_solns && satisfies(propagate(negate(l), p), neg_asg);
-          assert [negate(l)] + neg_asg in appendAssignments(negate(l), neg_solns);
-          propagateSoundness(negate(l), p, [negate(l)] + neg_asg);
-          assert satisfies(p, [negate(l)] + neg_asg);
-          
           // Use helper lemma to show solution is in final result
           var pos_result := solve(problemSize(p) * 2 - 1, propagate(l, rest));
           match pos_result {
             case Result(pos_solns) => {
-              solveReturnsResult(p, l, pos_solns, neg_solns, [negate(l)] + neg_asg);
+              // Show that neg_solns comes from the recursive call
+              assert solve(problemSize(p) * 2 - 1, propagate(negate(l), p)) == Result(neg_solns);  // from neg_result match
+              assert sat_asg in neg_solns;  // from recursive call's ensures clause
+              prependInSequence(negate(l), sat_asg);  // proves negate(l) in [negate(l)] + sat_asg
+              assert [negate(l)] + sat_asg in appendAssignments(negate(l), neg_solns);  // from definition of appendAssignments
+              solveReturnsResult(p, l, pos_solns, neg_solns, [negate(l)] + sat_asg);
               propagatePreservesSatisfaction(p, sat_asg, pos_solns);
             }
             case FuelExhausted => assert false;
@@ -744,6 +727,33 @@ lemma propagatePreservesSatisfaction(p: Problem, asg: Assignment, assignments: s
         removePreservesNonMatch(orig_c, negate(l), other);
         assert other in c && other in asg;
       }
+    }
+  }
+}
+
+// Add this lemma near the other helper lemmas
+lemma propagateSatisfactionLemma(l: Literal, p: Problem, sat_asg: Assignment)
+  requires satisfies(p, sat_asg)
+  requires negate(l) !in sat_asg
+  ensures satisfies(propagate(l, p), sat_asg)
+{
+  forall c | c in propagate(l, p)
+  ensures exists lit :: lit in c && lit in sat_asg
+  {
+    propagateHasOriginal(l, p, c);
+    var orig_c :| orig_c in p && l !in orig_c && c == remove(orig_c, negate(l));
+    
+    assert orig_c in p;
+    assert exists lit :: lit in orig_c && lit in sat_asg;
+    var lit :| lit in orig_c && lit in sat_asg;
+    
+    if lit != negate(l) {
+      removePreservesNonMatch(orig_c, negate(l), lit);
+      assert lit in c && lit in sat_asg;
+    } else {
+      assert lit in sat_asg;
+      assert lit == negate(l);
+      assert false;  // contradicts requires
     }
   }
 }
