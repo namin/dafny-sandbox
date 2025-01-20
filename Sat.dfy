@@ -319,7 +319,7 @@ lemma solveComplete(p: Problem, sat_asg: Assignment)
                    forall l :: l in asg ==> (l in sat_asg || negate(l) in sat_asg)
           )
           case FuelExhausted => false
-  decreases problemSize(p)
+  decreases problemSize(p), 1
 {
   solveTerminatesHelper(p, problemSize(p) * 2);
   assert solve(problemSize(p) * 2, p).Result?;
@@ -341,32 +341,32 @@ lemma solveComplete(p: Problem, sat_asg: Assignment)
     var rest := p[1..];
 
     if l in sat_asg {
-      // Show problem size decreases
-      propagateReduces(l, rest);
-      assert problemSize(propagate(l, rest)) < problemSize(p);
-      
-      // First prove sat_asg satisfies rest
-      satisfiesSubsequence(p, sat_asg, 1);
-      assert negate(l) !in sat_asg;  // from isConsistent(sat_asg) and l in sat_asg
-      propagateSatisfactionLemma(l, rest, sat_asg);
-      
-      // Use recursive call
-      solveComplete(propagate(l, rest), sat_asg);
+      // Use helper lemma for positive branch
+      solvePropagatedBranch(p, l, rest, sat_asg);
       
       // Get solution from recursive call
       var pos_result := solve(problemSize(p) * 2 - 1, propagate(l, rest));
-      assert pos_result.Result?;  // from solveTerminatesHelper
-      
       match pos_result {
         case Result(pos_solns) => {
           // Get solution that satisfies propagate(l, rest)
-          var pos_asg :| pos_asg in pos_solns && satisfies(propagate(l, rest), pos_asg);
+          var pos_asg :| pos_asg in pos_solns && satisfies(propagate(l, rest), pos_asg) &&
+                        forall m :: m in pos_asg ==> (m in sat_asg || negate(m) in sat_asg);
           
           // Show [l] + pos_asg works
           appendAssignmentsIncludes(l, pos_solns, pos_asg);
           prependInSequence(l, pos_asg);
-          prependPreservesSatisfaction(l, propagate(l, rest), pos_asg);
+          assert satisfies(propagate(l, rest), pos_asg);  // from witness
+          prependPreservesPropagatedSatisfaction(l, rest, pos_asg);
+          assert rest == p[1..];
           propagateSoundness(l, rest, [l] + pos_asg);
+
+          // Show solution is in final result and satisfies postcondition
+          var neg_result := solve(problemSize(p) * 2 - 1, propagate(negate(l), p));
+          match neg_result {
+            case Result(neg_solns) =>
+              solveReturnsResult(p, l, pos_solns, neg_solns, [l] + pos_asg);
+            case FuelExhausted => assert false;
+          }
         }
       }
     } else {
@@ -833,6 +833,56 @@ lemma prependPreservesSatisfaction(l: Literal, p: Problem, asg: Assignment)
   ensures exists lit :: lit in c && lit in ([l] + asg)
   {
     var lit :| lit in c && lit in asg;
+    assert lit in [l] + asg;  // since asg is suffix of [l] + asg
+  }
+}
+
+lemma solvePropagatedBranch(p: Problem, l: Literal, rest: Problem, sat_asg: Assignment)
+  requires p != [] && p[0] != []
+  requires l == p[0][0]
+  requires rest == p[1..]
+  requires satisfies(p, sat_asg)
+  requires isConsistent(sat_asg)
+  requires l in sat_asg
+  ensures match solve(problemSize(p) * 2 - 1, propagate(l, rest))
+          case Result(assignments) => 
+            exists asg :: asg in assignments && satisfies(propagate(l, rest), asg) &&
+                   forall m :: m in asg ==> (m in sat_asg || negate(m) in sat_asg)
+          case FuelExhausted => false
+  decreases problemSize(p), 0
+{
+  // Show problem size decreases
+  propagateReduces(l, rest);
+  assert problemSize(propagate(l, rest)) < problemSize(p);
+  
+  // Show sat_asg satisfies propagate(l, rest)
+  satisfiesSubsequence(p, sat_asg, 1);
+  assert negate(l) !in sat_asg;  // from isConsistent(sat_asg) and l in sat_asg
+  propagateSatisfactionLemma(l, rest, sat_asg);
+  
+  // Use recursive call
+  solveComplete(propagate(l, rest), sat_asg);
+  
+  // Connect recursive result to our ensures
+  assert solve(problemSize(propagate(l, rest)) * 2, propagate(l, rest)).Result?;
+  var rec_result := solve(problemSize(propagate(l, rest)) * 2, propagate(l, rest));
+  
+  // Show we have enough fuel
+  solveFuelMonotonic(propagate(l, rest), 
+                    problemSize(propagate(l, rest)) * 2,
+                    problemSize(p) * 2 - 1);
+}
+
+lemma prependPreservesPropagatedSatisfaction(l: Literal, p: Problem, asg: Assignment)
+  requires satisfies(propagate(l, p), asg)
+  ensures satisfies(propagate(l, p), [l] + asg)
+{
+  forall c | c in propagate(l, p)
+  ensures exists lit :: lit in c && lit in ([l] + asg)
+  {
+    // Since asg satisfies propagate(l, p), find satisfying literal
+    var lit :| lit in c && lit in asg;
+    // That literal is still in [l] + asg
     assert lit in [l] + asg;  // since asg is suffix of [l] + asg
   }
 }
