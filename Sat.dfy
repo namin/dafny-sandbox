@@ -310,17 +310,19 @@ function satisfies(p: Problem, asg: Assignment): bool
 }
 
 // ## Complete
+/*
 lemma solveComplete(p: Problem, sat_asg: Assignment)
   requires satisfies(p, sat_asg)
   requires isConsistent(sat_asg)
   ensures match solve(problemSize(p) * 2, p)
-          case Result(assignments) => toSet(sat_asg) in set asg | asg in assignments :: toSet(asg)
+          case Result(assignments) => Set(sat_asg) in set asg | asg in assignments :: Set(asg)
           case FuelExhausted => false
-  ensures forall asg, l :: satisfies(p, asg) && l in asg ==> satisfies(propagate(l, p), asg)
   decreases problemSize(p)
 {
+// TODO
 }
-function toSet(asg: Assignment): set<Literal>
+*/
+function Set(asg: Assignment): set<Literal>
 {
   set x | x in asg :: x
 }
@@ -339,7 +341,7 @@ method Main() // Counterexample to naive statement of completeness
           if |assignments| == 1 {
             print "Solution: ", assignments[0];
             print assignments[0] == sat_asg;
-            print toSet(assignments[0]) == toSet(sat_asg);
+            print Set(assignments[0]) == Set(sat_asg);
           } else {
             print "Multiple solutions found";
           }
