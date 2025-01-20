@@ -355,10 +355,22 @@ lemma solveComplete(p: Problem, sat_asg: Assignment)
           // Show [l] + pos_asg works
           appendAssignmentsIncludes(l, pos_solns, pos_asg);
           prependInSequence(l, pos_asg);
-          assert satisfies(propagate(l, rest), pos_asg);  // from witness
-          propagateSoundnessWithPrefix(l, p, rest, pos_asg);  // use new lemma instead of propagateSoundness
+          assert satisfies(propagate(l, rest), pos_asg);
+          propagateSoundnessWithPrefix(l, p, rest, pos_asg);
 
-          // Show solution is in final result and satisfies postcondition
+          // Show all literals come from sat_asg using forall
+          forall m | m in [l] + pos_asg
+          ensures m in sat_asg || negate(m) in sat_asg
+          {
+            if m == l {
+              assert m in sat_asg;  // from if condition
+            } else {
+              assert m in pos_asg;  // since m in [l] + pos_asg and m != l
+              assert m in sat_asg || negate(m) in sat_asg;  // from pos_asg's property
+            }
+          }
+
+          // Show solution is in final result
           var neg_result := solve(problemSize(p) * 2 - 1, propagate(negate(l), p));
           match neg_result {
             case Result(neg_solns) =>
