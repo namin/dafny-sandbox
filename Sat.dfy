@@ -412,7 +412,8 @@ lemma solveComplete(p: Problem, sat_asg: Assignment)
         var orig_c :| orig_c in p && negate(l) !in orig_c && c == remove(orig_c, l);
         
         // Since sat_asg satisfies orig_c, find satisfying literal
-        assert exists lit :: lit in orig_c && lit in sat_asg;
+        assert orig_c in p;  // from propagateHasOriginal
+        assert exists lit :: lit in orig_c && lit in sat_asg;  // since satisfies(p, sat_asg)
         var lit :| lit in orig_c && lit in sat_asg;
         
         // If lit != l, it survives remove
@@ -420,34 +421,12 @@ lemma solveComplete(p: Problem, sat_asg: Assignment)
           removePreservesNonMatch(orig_c, l, lit);
           assert lit in c && lit in sat_asg;
         } else {
-          // If l == negate(lit), we need to find another literal
-          assert l == negate(lit);  // from if condition
-          
-          // Since sat_asg satisfies orig_c, there must be some literal in it that's in sat_asg
-          assert exists lit :: lit in orig_c && lit in sat_asg;  // from satisfies(p, sat_asg)
-          var sat_lit :| sat_lit in orig_c && sat_lit in sat_asg;
-          
-          // That literal can't be negate(lit) since:
-          // 1. lit is in sat_asg (from requires)
-          // 2. sat_asg is consistent (from precondition)
-          assert lit in sat_asg;  // from requires
-          
-          // Use precondition to show sat_asg is consistent
-          assert match solve(problemSize(p) * 2, p) {
-            case Result(assignments) => sat_asg in assignments ==> isConsistent(sat_asg)
-            case FuelExhausted => true
-          };
-          assert isConsistent(sat_asg);  // from precondition
-          assert negate(lit) !in sat_asg;  // from isConsistent
-          
-          // Therefore sat_lit can't be negate(lit)
-          assert sat_lit in sat_asg;  // from above
-          assert sat_lit != negate(lit);  // since negate(lit) !in sat_asg
-          
-          // Therefore sat_lit is our "other" literal
-          assert sat_lit in orig_c && sat_lit in sat_asg && sat_lit != negate(lit);
-          removePreservesNonMatch(orig_c, negate(lit), sat_lit);
-          assert sat_lit in c && sat_lit in sat_asg;
+          // If lit == l, we need to find another literal
+          // But this case is impossible since l !in sat_asg
+          assert lit in sat_asg;  // from above
+          assert lit == l;  // from if condition
+          assert l !in sat_asg;  // from branch condition
+          assert false;  // contradiction
         }
       }
       assert satisfies(propagate(negate(l), p), sat_asg);
