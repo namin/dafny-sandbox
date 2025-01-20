@@ -399,16 +399,15 @@ lemma solveComplete(p: Problem, sat_asg: Assignment)
           var neg_result := solve(problemSize(p) * 2 - 1, propagate(negate(l), p));
           match neg_result {
             case Result(neg_solns) => {
-              // Show that neg_solns comes from the recursive call
-              assert solve(problemSize(p) * 2 - 1, propagate(negate(l), p)) == Result(neg_solns);  // from neg_result match
-              assert problemSize(p) * 2 - 1 <= problemSize(propagate(negate(l), p)) * 2;  // need to prove this
-              solveFuelMonotonic(propagate(negate(l), p), problemSize(p) * 2 - 1, problemSize(propagate(negate(l), p)) * 2);
-              assert solve(problemSize(propagate(negate(l), p)) * 2, propagate(negate(l), p)).Result?;  // from recursive call
-              assert sat_asg in solve(problemSize(propagate(negate(l), p)) * 2, propagate(negate(l), p)).assignments;  // from recursive call
-              assert solve(problemSize(p) * 2 - 1, propagate(negate(l), p)).assignments == neg_solns;  // from neg_result match
-              assert solve(problemSize(p) * 2 - 1, propagate(negate(l), p)).assignments == solve(problemSize(propagate(negate(l), p)) * 2, propagate(negate(l), p)).assignments;  // from fuel monotonicity
+              // Need to prove: problemSize(p) * 2 - 1 >= problemSize(propagate(negate(l), p)) * 2
+              propagateReduces(negate(l), p);
+              assert problemSize(propagate(negate(l), p)) <= problemSize(p);
+              
+              // Use fuel monotonicity in the other direction
+              solveFuelMonotonic(propagate(negate(l), p), problemSize(propagate(negate(l), p)) * 2, problemSize(p) * 2 - 1);
               assert sat_asg in neg_solns;  // from fuel monotonicity
-              assert [negate(l)] + sat_asg in appendAssignments(negate(l), neg_solns);  // from definition of appendAssignments
+              
+              assert [negate(l)] + sat_asg in appendAssignments(negate(l), neg_solns);
               var pos_result := solve(problemSize(p) * 2 - 1, propagate(l, rest));
               match pos_result {
                 case Result(pos_solns) => {
