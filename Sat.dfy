@@ -356,9 +356,7 @@ lemma solveComplete(p: Problem, sat_asg: Assignment)
           appendAssignmentsIncludes(l, pos_solns, pos_asg);
           prependInSequence(l, pos_asg);
           assert satisfies(propagate(l, rest), pos_asg);  // from witness
-          prependPreservesPropagatedSatisfaction(l, rest, pos_asg);
-          assert rest == p[1..];
-          propagateSoundness(l, rest, [l] + pos_asg);
+          propagateSoundnessWithPrefix(l, p, rest, pos_asg);  // use new lemma instead of propagateSoundness
 
           // Show solution is in final result and satisfies postcondition
           var neg_result := solve(problemSize(p) * 2 - 1, propagate(negate(l), p));
@@ -884,5 +882,40 @@ lemma prependPreservesPropagatedSatisfaction(l: Literal, p: Problem, asg: Assign
     var lit :| lit in c && lit in asg;
     // That literal is still in [l] + asg
     assert lit in [l] + asg;  // since asg is suffix of [l] + asg
+  }
+}
+
+lemma propagateSoundnessWithPrefix(l: Literal, p: Problem, rest: Problem, asg: Assignment)
+  requires p != [] && p[0] != []
+  requires l == p[0][0]
+  requires rest == p[1..]
+  requires satisfies(propagate(l, rest), asg)  // what we have from pos_asg
+  ensures satisfies(p, [l] + asg)  // what solveReturnsResult needs
+{
+  // Need to show every clause in p is satisfied by [l] + asg
+  forall c | c in p
+  ensures exists lit :: lit in c && lit in ([l] + asg)
+  {
+    if c == p[0] {
+      // First clause contains l
+      assert l in c;  // since l == p[0][0]
+      assert l in [l] + asg;  // by definition of [l] + asg
+    } else {
+      // c is in rest, so either:
+      // 1. l is in c (satisfied by [l] + asg)
+      // 2. l is not in c, so c is in propagate(l, rest)
+      if l in c {
+        assert l in [l] + asg;
+      } else {
+        // c must be in propagate(l, rest)
+        assert c in rest;  // since c != p[0]
+        propagateContains(l, rest, c);
+        // Find literal in asg that satisfies c
+        var lit :| lit in remove(c, negate(l)) && lit in asg;
+        removeContains(c, negate(l), lit);
+        assert lit in c && lit != negate(l);
+        assert lit in [l] + asg;  // since asg is suffix of [l] + asg
+      }
+    }
   }
 }
