@@ -422,6 +422,26 @@ lemma solveComplete(p: Problem, sat_asg: Assignment)
           prependPreservesSatisfaction(negate(l), propagate(negate(l), p), neg_asg);
           propagateSoundness(negate(l), p, [negate(l)] + neg_asg);
           
+          // Show all literals come from sat_asg using forall
+          forall m | m in [negate(l)] + neg_asg
+          ensures m in sat_asg || negate(m) in sat_asg
+          {
+            if m == negate(l) {
+              // We know:
+              // - lit in sat_asg && lit in p[0] (from witness)
+              // - lit != l (proven earlier)
+              assert lit in sat_asg && lit in p[0];
+              assert lit != l;
+              assert l !in sat_asg;
+              assert negate(m) == l;  // since m == negate(l)
+              assert negate(m) !in sat_asg;  // since l !in sat_asg
+              assert m in sat_asg;  // since lit in sat_asg and lit in p[0]
+            } else {
+              assert m in neg_asg;  // since m in [negate(l)] + neg_asg and m != negate(l)
+              assert m in sat_asg || negate(m) in sat_asg;  // from neg_asg's property
+            }
+          }
+
           // Get positive branch solution
           var pos_result := solve(problemSize(p) * 2 - 1, propagate(l, rest));
           match pos_result {
