@@ -399,10 +399,24 @@ lemma solveComplete(p: Problem, sat_asg: Assignment)
           var neg_result := solve(problemSize(p) * 2 - 1, propagate(negate(l), p));
           match neg_result {
             case Result(neg_solns) => {
-              assert sat_asg in neg_solns;  // from recursive call
+              // Show that neg_solns comes from the recursive call
+              assert solve(problemSize(p) * 2 - 1, propagate(negate(l), p)) == Result(neg_solns);  // from neg_result match
+              assert problemSize(p) * 2 - 1 <= problemSize(propagate(negate(l), p)) * 2;  // need to prove this
+              solveFuelMonotonic(propagate(negate(l), p), problemSize(p) * 2 - 1, problemSize(propagate(negate(l), p)) * 2);
+              assert solve(problemSize(propagate(negate(l), p)) * 2, propagate(negate(l), p)).Result?;  // from recursive call
+              assert sat_asg in solve(problemSize(propagate(negate(l), p)) * 2, propagate(negate(l), p)).assignments;  // from recursive call
+              assert solve(problemSize(p) * 2 - 1, propagate(negate(l), p)).assignments == neg_solns;  // from neg_result match
+              assert solve(problemSize(p) * 2 - 1, propagate(negate(l), p)).assignments == solve(problemSize(propagate(negate(l), p)) * 2, propagate(negate(l), p)).assignments;  // from fuel monotonicity
+              assert sat_asg in neg_solns;  // from fuel monotonicity
               assert [negate(l)] + sat_asg in appendAssignments(negate(l), neg_solns);  // from definition of appendAssignments
-              solveReturnsResult(p, l, pos_solns, neg_solns, [negate(l)] + sat_asg);
-              propagatePreservesSatisfaction(p, sat_asg, pos_solns);
+              var pos_result := solve(problemSize(p) * 2 - 1, propagate(l, rest));
+              match pos_result {
+                case Result(pos_solns) => {
+                  solveReturnsResult(p, l, pos_solns, neg_solns, [negate(l)] + sat_asg);
+                  propagatePreservesSatisfaction(p, sat_asg, pos_solns);
+                }
+                case FuelExhausted => assert false;
+              }
             }
             case FuelExhausted => assert false;
           }
@@ -755,5 +769,38 @@ lemma propagateSatisfactionLemma(l: Literal, p: Problem, sat_asg: Assignment)
       assert lit == negate(l);
       assert false;  // contradicts requires
     }
+  }
+}
+
+// Add this lemma for fuel monotonicity
+lemma solveFuelMonotonic(p: Problem, fuel1: nat, fuel2: nat)
+  requires fuel1 <= fuel2
+  requires solve(fuel1, p).Result?
+  ensures solve(fuel2, p).Result?
+  ensures solve(fuel1, p).assignments == solve(fuel2, p).assignments
+  decreases problemSize(p)
+{
+  if p == [] {
+    assert solve(fuel1, p) == Result([[]]);
+    assert solve(fuel2, p) == Result([[]]);
+  } else if p[0] == [] {
+    assert solve(fuel1, p) == Result([]);
+    assert solve(fuel2, p) == Result([]);
+  } else if fuel1 == 0 {
+    assert false;  // contradicts requires since solve(0, p) == FuelExhausted
+  } else {
+    var l := p[0][0];
+    var rest := p[1..];
+    
+    propagateReduces(l, rest);
+    propagateReduces(negate(l), p);
+    
+    var pos_result1 := solve(fuel1 - 1, propagate(l, rest));
+    var neg_result1 := solve(fuel1 - 1, propagate(negate(l), p));
+    var pos_result2 := solve(fuel2 - 1, propagate(l, rest));
+    var neg_result2 := solve(fuel2 - 1, propagate(negate(l), p));
+    
+    solveFuelMonotonic(propagate(l, rest), fuel1 - 1, fuel2 - 1);
+    solveFuelMonotonic(propagate(negate(l), p), fuel1 - 1, fuel2 - 1);
   }
 }
