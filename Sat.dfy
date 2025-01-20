@@ -107,6 +107,11 @@ method Main()
   }
 }
 
+lemma solveTerminates(p: Problem)
+  ensures solve(problemSize(p) * 2, p).Result?
+{
+  solveTerminatesHelper(p, problemSize(p) * 2);
+}
 lemma solveTerminatesHelper(p: Problem, fuel: nat)
   requires fuel >= problemSize(p) * 2
   ensures solve(fuel, p).Result?
