@@ -8,7 +8,8 @@
 // including the decomposition into lemmas and the suggestion of the termination upper bound
 
 // translatio from Haskell
-type Literal = int
+datatype Literal = Pos(n: nat) | Neg(n: nat)
+
 type Clause = seq<Literal>
 type Problem = seq<Clause>
 type Assignment = seq<Literal>
@@ -30,7 +31,7 @@ function propagate(l: Literal, p: Problem): Problem
     var rest := p[1..];
     
     if l in c then propagate(l, rest)
-    else [remove(c, -l)] + propagate(l, rest)
+    else [remove(c, negate(l))] + propagate(l, rest)
 }
 function remove(c: Clause, l: Literal): Clause
 {
@@ -64,12 +65,12 @@ function solve(fuel: nat, p: Problem): SolveResult
       else
         var l := c[0];
 
-        match (solve(fuel - 1, propagate(l, rest)), solve(fuel - 1, propagate(-l, p)))
+        match (solve(fuel - 1, propagate(l, rest)), solve(fuel - 1, propagate(negate(l), p)))
         {
           case (FuelExhausted, _) => FuelExhausted
           case (_, FuelExhausted) => FuelExhausted
           case (Result(posSolve), Result(negSolve)) =>
-            Result(appendAssignments(l, posSolve) + appendAssignments(-l, negSolve))
+            Result(appendAssignments(l, posSolve) + appendAssignments(negate(l), negSolve))
         }
 }
 // Helper function to append a literal to each assignment
@@ -86,7 +87,7 @@ function appendAssignments(l: Literal, assignments: seq<Assignment>): seq<Assign
 // end-to-end solve
 method Main()
 {
-  var problem1 := [[1, -2], [-1, 2], [2, 3], [-3]];
+  var problem1 := [[Pos(1), Neg(2)], [Neg(1), Pos(2)], [Pos(2), Pos(3)], [Neg(3)]];
   var result1 := solve(10, problem1); // Use sufficient fuel
 
   match result1
@@ -96,7 +97,7 @@ method Main()
       print "Solutions: ", assignments, "\n";
   }
 
-  var problem2 := [[1], [-1]]; // UNSAT (contradiction)
+  var problem2 := [[Pos(1)], [Neg(1)]]; // UNSAT (contradiction)
   var result2 := solve(10, problem2);
 
   match result2
@@ -126,22 +127,22 @@ lemma solveTerminatesHelper(p: Problem, fuel: nat)
     var rest := p[1..];
     
     propagateReduces(l, rest);
-    propagateReduces(-l, p);
+    propagateReduces(negate(l), p);
 
     assert problemSize(propagate(l, rest)) <= problemSize(rest);
     assert problemSize(propagate(l, rest)) < problemSize(p);
 
-    assert problemSize(propagate(-l, p)) <= problemSize(p);
+    assert problemSize(propagate(negate(l), p)) <= problemSize(p);
     restReduces(p);
     assert problemSize(rest) < problemSize(p);
-    assert problemSize(propagate(-l, p)) < problemSize(p);
+    assert problemSize(propagate(negate(l), p)) < problemSize(p);
 
     var newFuel := fuel - 1;
     assert newFuel >= problemSize(propagate(l, rest)) * 2;
-    assert newFuel >= problemSize(propagate(-l, p)) * 2;
+    assert newFuel >= problemSize(propagate(negate(l), p)) * 2;
 
     solveTerminatesHelper(propagate(l, rest), newFuel);
-    solveTerminatesHelper(propagate(-l, p), newFuel);
+    solveTerminatesHelper(propagate(negate(l), p), newFuel);
   }
 }
 function problemSize(p: Problem): nat
@@ -175,7 +176,7 @@ lemma restReduces(p: Problem)
 lemma propagateReduces(l: Literal, p: Problem)
   ensures problemSize(propagate(l, p)) <= problemSize(p)
   ensures p != [] && l in p[0] ==> problemSize(propagate(l, p)) < problemSize(p)
-  ensures p != [] && -l in p[0] ==> problemSize(propagate(l, p)) < problemSize(p)
+  ensures p != [] && negate(l) in p[0] ==> problemSize(propagate(l, p)) < problemSize(p)
 {
   if p != [] {
     var c := p[0];
@@ -189,16 +190,31 @@ lemma propagateReduces(l: Literal, p: Problem)
       assert |c| > 0;  // since it contains l
       assert problemSize(propagate(l, p)) < problemSize(p);
     } else {
-      removeReduces(c, -l);
+      removeReduces(c, negate(l));
       propagateReduces(l, rest);
-      assert |remove(c, -l)| <= |c|;
-      if -l in c {
-        assert |remove(c, -l)| < |c|;
+      assert |remove(c, negate(l))| <= |c|;
+      if negate(l) in c {
+        assert |remove(c, negate(l))| < |c|;
         assert problemSize(propagate(l, p)) < problemSize(p);
       }
     }
   }
 }
+
+/*
+lemma solveConsistent(fuel: nat, p: Problem, asg: Assignment)
+  requires match solve(fuel, p)
+           case Result(assignments) => asg in assignments
+           case FuelExhausted => false
+  ensures isConsistent(asg)
+{
+}
+*/
+predicate isConsistent(asg: Assignment)
+{
+  forall l :: l in asg ==> negate(l) !in asg
+}
+
 
 lemma solveSound(fuel: nat, p: Problem, asg: Assignment)
   requires match solve(fuel, p)
@@ -221,12 +237,12 @@ lemma solveSound(fuel: nat, p: Problem, asg: Assignment)
     var rest := p[1..];
     
     var pos_result := solve(fuel - 1, propagate(l, rest));
-    var neg_result := solve(fuel - 1, propagate(-l, p));
+    var neg_result := solve(fuel - 1, propagate(negate(l), p));
     match pos_result {
       case Result(pos_solns) => {
         match neg_result {
           case Result(neg_solns) => {
-            var all_solns := appendAssignments(l, pos_solns) + appendAssignments(-l, neg_solns);
+            var all_solns := appendAssignments(l, pos_solns) + appendAssignments(negate(l), neg_solns);
             assert asg in all_solns;  // from requires
             
             if asg in appendAssignments(l, pos_solns) {
@@ -261,19 +277,19 @@ lemma solveSound(fuel: nat, p: Problem, asg: Assignment)
               }
             } else {
               // Case 2: asg came from negative branch
-              appendAssignmentsContains(-l, neg_solns, asg);
-              var neg_asg :| asg == [-l] + neg_asg && neg_asg in neg_solns;
+              appendAssignmentsContains(negate(l), neg_solns, asg);
+              var neg_asg :| asg == [negate(l)] + neg_asg && neg_asg in neg_solns;
               
               // Use recursive soundness on neg_asg
-              solveSound(fuel-1, propagate(-l, p), neg_asg);
-              assert satisfies(propagate(-l, p), neg_asg);
+              solveSound(fuel-1, propagate(negate(l), p), neg_asg);
+              assert satisfies(propagate(negate(l), p), neg_asg);
               
               // Show -l in asg using prependInSequence
-              prependInSequence(-l, neg_asg);
-              assert -l in asg;  // since asg == [-l] + neg_asg
+              prependInSequence(negate(l), neg_asg);
+              assert negate(l) in asg;  // since asg == [negate(l)] + neg_asg
               
               // Use propagateSoundness with asg (not neg_asg)
-              propagateSoundness(-l, p, asg);
+              propagateSoundness(negate(l), p, asg);
               assert satisfies(p, asg);
             }
           }
@@ -300,8 +316,8 @@ lemma propagateSoundness(l: Literal, p: Problem, asg: Assignment)
   {
     if l !in c {
       propagateContains(l, p, c);
-      var lit :| lit in remove(c, -l) && lit in asg;
-      removeContains(c, -l, lit);
+      var lit :| lit in remove(c, negate(l)) && lit in asg;
+      removeContains(c, negate(l), lit);
     }
   }
 }
@@ -326,13 +342,13 @@ lemma removeContains(c: Clause, l: Literal, x: Literal)
 lemma propagateContains(l: Literal, p: Problem, c: Clause)
   requires c in p
   requires l !in c
-  ensures remove(c, -l) in propagate(l, p)
+  ensures remove(c, negate(l)) in propagate(l, p)
   decreases p
 {
   if p != [] {
     if c == p[0] {
       // Base case: c is the first clause
-      assert remove(c, -l) == propagate(l, p)[0];
+      assert remove(c, negate(l)) == propagate(l, p)[0];
     } else {
       // Recursive case: c is in the rest of p
       propagateContains(l, p[1..], c);
@@ -438,7 +454,7 @@ lemma assignmentContainsLiteral(p: Problem, asg: Assignment, l: Literal)
   requires l == p[0][0]  // changed from l in p[0] to be more specific
   requires |p[0]| == 1   // new precondition: first clause is singleton
   requires satisfies(p, asg)
-  ensures l in asg || -l in asg
+  ensures l in asg || negate(l) in asg
 {
   // Since asg satisfies p, it must satisfy p[0]
   assert p[0] in p;
@@ -448,14 +464,13 @@ lemma assignmentContainsLiteral(p: Problem, asg: Assignment, l: Literal)
   if lit == l {
     // If lit is l, then l in asg
     assert l in asg;
-  } else if lit == -l {
-    // If lit is -l, then -l in asg
-    assert -l in asg;
+  } else if lit == negate(l) {
+    // If lit is negate(l), then negate(l) in asg
+    assert negate(l) in asg;
   } else {
     // If lit is neither l nor -l, it must still be in p[0]
     assert lit in p[0];
-    assert lit in asg;
-    assert lit != l && lit != -l;
+    assert lit != l && lit != negate(l);
     assert l == p[0][0];  // from requires
     
     // Since lit is in p[0], it must be at some index i
@@ -484,6 +499,13 @@ lemma propagateComplete(l: Literal, p: Problem, asg: Assignment)
   }
 }
 */
+
+function negate(l: Literal): Literal {
+  match l {
+    case Pos(n) => Neg(n)
+    case Neg(n) => Pos(n)
+  }
+}
 
 
 
