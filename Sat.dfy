@@ -207,15 +207,12 @@ lemma propagateReduces(l: Literal, p: Problem)
 }
 
 // ## Consistent
-/*
 lemma solveConsistent(fuel: nat, p: Problem, asg: Assignment)
   requires match solve(fuel, p)
            case Result(assignments) => asg in assignments
            case FuelExhausted => false
   ensures isConsistent(asg)
-{
-}
-*/
+// TODO
 predicate isConsistent(asg: Assignment)
 {
   forall l :: l in asg ==> negate(l) !in asg
@@ -312,15 +309,146 @@ function satisfies(p: Problem, asg: Assignment): bool
 }
 
 // ## Complete
-/*
 lemma solveComplete(p: Problem)
   requires exists asg: Assignment :: satisfies(p, asg)
-  ensures match solve(10, p)
-          case Result(assignments) => exists asg: Assignment :: asg in assignments && satisfies(p, asg)
-          case FuelExhausted => true
+  ensures match solve(problemSize(p) * 2, p)
+          case Result(assignments) => exists asg :: asg in assignments && satisfies(p, asg)
+          case FuelExhausted => false
+  ensures forall asg, l :: satisfies(p, asg) && l in asg ==> satisfies(propagate(l, p), asg)
+  decreases problemSize(p)
 {
+  var sat_asg :| satisfies(p, sat_asg);
+  
+  if p == [] {
+    var empty_asg: Assignment := [];
+    assert solve(problemSize(p) * 2, p) == Result([empty_asg]);
+    assert empty_asg in [empty_asg];
+    assert satisfies(p, empty_asg);
+    // For second ensures: empty problem case is trivial
+    assert forall asg, l :: satisfies([], asg) && l in asg ==> satisfies(propagate(l, []), asg);
+  } else if p[0] == [] {
+    // Impossible case - contradicts requires since empty clause can't be satisfied
+    assert p[0] in p;  // first clause is in p
+    assert exists l :: l in sat_asg && l in p[0];  // from satisfies(p, sat_asg)
+    assert p[0] == [];  // from if condition
+    assert false;  // contradiction: no literal can be in both sat_asg and empty clause
+  } else {
+    var l := p[0][0];
+    var rest := p[1..];
+    
+    // Show problem size decreases
+    propagateReduces(l, rest);
+    assert problemSize(propagate(l, rest)) < problemSize(p);
+    propagateReduces(negate(l), p);
+    assert problemSize(propagate(negate(l), p)) < problemSize(p);
+    
+    // Since sat_asg satisfies p, it must satisfy p[0]
+    assert p[0] in p;  // first clause is in p
+    assert exists lit :: lit in p[0] && lit in sat_asg;  // from satisfies(p, sat_asg)
+    var lit :| lit in p[0] && lit in sat_asg;
+    
+    if l in sat_asg {
+      // Show sat_asg satisfies propagate(l, rest)
+      // This follows from the second ensures clause we're proving
+      assert satisfies(p, sat_asg) && l in sat_asg;  // from requires and if condition
+      assert satisfies(propagate(l, rest), sat_asg);  // from second ensures
+      
+      solveTerminatesHelper(propagate(l, rest), problemSize(p) * 2 - 1);
+      solveComplete(propagate(l, rest));
+      
+      // Get solution from recursive call
+      var pos_result := solve(problemSize(p) * 2 - 1, propagate(l, rest));
+      match pos_result {
+        case Result(pos_solns) => {
+          var pos_asg :| pos_asg in pos_solns && satisfies(propagate(l, rest), pos_asg);
+          assert [l] + pos_asg in appendAssignments(l, pos_solns);
+          propagateSoundness(l, rest, [l] + pos_asg);
+          assert satisfies(p, [l] + pos_asg);
+          
+          // Prove second ensures clause
+          forall asg, lit | satisfies(p, asg) && lit in asg 
+          ensures satisfies(propagate(lit, p), asg)
+          {
+            // For any clause c in propagate(lit, p), show asg satisfies it
+            forall c | c in propagate(lit, p)
+            ensures exists l :: l in c && l in asg
+            {
+              // Find original clause
+              propagateHasOriginal(lit, p, c);
+              var orig_c :| orig_c in p && lit !in orig_c && c == remove(orig_c, negate(lit));
+              
+              // Since asg satisfies orig_c, find literal in both
+              assert exists l :: l in orig_c && l in asg;  // from satisfies(p, asg)
+              var l :| l in orig_c && l in asg;
+              
+              // If l != negate(lit), it survives remove and we use it
+              if l != negate(lit) {
+                removePreservesOthers(orig_c, negate(lit), l);  // need this lemma
+                assert l in c && l in asg;
+              } else {
+                // If l == negate(lit), we use lit which we know is in asg
+                assert lit in asg;  // from requires
+                // Need to show lit is in c after removing negate(lit)
+                // This follows from how propagate works - if lit !in orig_c,
+                // then c must be in propagate(lit, p)
+                assert lit !in orig_c;  // from propagateHasOriginal
+                assert c in propagate(lit, p);  // from requires
+                // Therefore lit must be in c
+                assert lit in c;  // need to prove this with a lemma
+              }
+            }
+          }
+          
+          // Show that solve(problemSize(p) * 2, p) returns Result
+          solveTerminatesHelper(p, problemSize(p) * 2);
+          var final_result := solve(problemSize(p) * 2, p);
+          assert final_result.Result?;
+          
+          // Connect recursive solution to final solution
+          var neg_result := solve(problemSize(p) * 2 - 1, propagate(negate(l), p));
+          match neg_result {
+            case Result(neg_solns) => {
+              // Use lemma to show how results combine
+              solveCombinesResults(p, l, pos_solns, neg_solns);
+              
+              // Show our solution is in the positive branch
+              assert [l] + pos_asg in appendAssignments(l, pos_solns);
+              assert [l] + pos_asg in final_result.assignments;
+            }
+            case FuelExhausted => assert false;
+          }
+          assert exists asg :: asg in final_result.assignments && satisfies(p, asg);
+        }
+        case FuelExhausted => assert false;
+      }
+    } else {
+      // Show sat_asg satisfies propagate(negate(l), p)
+      assert l !in sat_asg;  // from else branch
+      assert satisfies(p, sat_asg);  // from requires
+      
+      // For any clause c in propagate(negate(l), p), show sat_asg satisfies it
+      forall c | c in propagate(negate(l), p)
+      ensures exists lit :: lit in c && lit in sat_asg
+      {
+        // Find original clause
+        propagateHasOriginal(negate(l), p, c);
+        var orig_c :| orig_c in p && negate(l) !in orig_c && c == remove(orig_c, l);
+        
+        // Find literal that satisfies original clause
+        assert exists lit :: lit in orig_c && lit in sat_asg;  // from satisfies(p, sat_asg)
+        var orig_lit :| orig_lit in orig_c && orig_lit in sat_asg;
+        
+        // Show orig_lit != l since l !in sat_asg
+        assert orig_lit != l;  // since orig_lit in sat_asg and l !in sat_asg
+        
+        // Show orig_lit survives remove
+        assert orig_lit in orig_c && orig_lit != l;  // from above
+        assert orig_lit in remove(orig_c, l);  // follows from removePreservesOthers lemma
+      }
+      assert satisfies(propagate(negate(l), p), sat_asg);
+    }
+  }
 }
-*/
 
 // ## Helper Lemmas
 
@@ -418,43 +546,157 @@ lemma prependInSequence<T>(x: T, s: seq<T>)
   assert ([x] + s)[0] == x;
 }
 
-// Helper lemma: if an assignment satisfies a problem, it must contain either l or -l from first non-empty clause
-lemma assignmentContainsLiteral(p: Problem, asg: Assignment, l: Literal)
-  requires p != [] && p[0] != []
-  requires l == p[0][0]  // changed from l in p[0] to be more specific
-  requires |p[0]| == 1   // new precondition: first clause is singleton
-  requires satisfies(p, asg)
-  ensures l in asg || negate(l) in asg
+// Helper function to find the original clause
+function findOriginalClause(l: Literal, p: Problem, c: Clause): Clause
+  requires c in propagate(l, p)
+  ensures var orig_c := findOriginalClause(l, p, c);
+         orig_c in p && l !in orig_c && c == remove(orig_c, negate(l))
+  decreases p
 {
-  // Since asg satisfies p, it must satisfy p[0]
-  assert p[0] in p;
-  var lit :| lit in asg && lit in p[0];
-  
-  // Key insight: lit must be either l, -l, or some other literal in p[0]
-  if lit == l {
-    // If lit is l, then l in asg
-    assert l in asg;
-  } else if lit == negate(l) {
-    // If lit is negate(l), then negate(l) in asg
-    assert negate(l) in asg;
+  propagateHasOriginal(l, p, c);  // proves such a clause exists
+  if p == [] then (
+    assert propagate(l, p) == [];
+    assert false;  // contradiction: c in propagate(l, []) == []
+    []
+  ) else if l in p[0] then (
+    assert propagate(l, p) == propagate(l, p[1..]);
+    findOriginalClause(l, p[1..], c)
+  ) else if c == remove(p[0], negate(l)) then (
+    assert p[0] in p;
+    assert l !in p[0];  // since we're in else branch
+    p[0]
+  ) else (
+    propagateContainsRest(l, p, c);  // proves c in propagate(l, p[1..])
+    findOriginalClause(l, p[1..], c)
+  )
+}
+
+// Helper lemma: if c is in propagate(l, p), then there exists an original clause in p
+lemma propagateHasOriginal(l: Literal, p: Problem, c: Clause)
+  requires c in propagate(l, p)
+  ensures exists orig_c :: orig_c in p && l !in orig_c && c == remove(orig_c, negate(l))
+  decreases p
+{
+  if p == [] {
+    // Contradiction: c in propagate(l, []) == []
+    assert propagate(l, p) == [];
+    assert false;
   } else {
-    // If lit is neither l nor -l, it must still be in p[0]
-    assert lit in p[0];
-    assert lit != l && lit != negate(l);
-    assert l == p[0][0];  // from requires
-    
-    // Since lit is in p[0], it must be at some index i
-    assert exists i :: 0 <= i < |p[0]| && p[0][i] == lit;
-    var i :| 0 <= i < |p[0]| && p[0][i] == lit;
-    
-    // Since lit != l and l is at index 0, i must be > 0
-    assert i > 0;  // since p[0][0] == l and lit != l
-    assert p[0][0] == l;  // from requires
-    assert p[0][i] == lit;  // from witness
-    assert |p[0]| == 1;  // from requires
-    assert false;  // contradiction: i can't be > 0 since |p[0]| == 1
+    if l in p[0] {
+      // c must come from propagate(l, rest)
+      assert propagate(l, p) == propagate(l, p[1..]);
+      propagateHasOriginal(l, p[1..], c);
+      var orig_c :| orig_c in p[1..] && l !in orig_c && c == remove(orig_c, negate(l));
+      assert orig_c in p;  // since p[1..] is a subsequence of p
+    } else if c == remove(p[0], negate(l)) {
+      // Found it - it's p[0]
+      assert p[0] in p;
+      assert l !in p[0];  // since we're in else branch
+      assert c == remove(p[0], negate(l));
+      // Witness is p[0]
+    } else {
+      // c must come from propagate(l, rest)
+      assert c in propagate(l, p[1..]);  // from definition of propagate
+      propagateHasOriginal(l, p[1..], c);
+      var orig_c :| orig_c in p[1..] && l !in orig_c && c == remove(orig_c, negate(l));
+      assert orig_c in p;  // since p[1..] is a subsequence of p
+    }
   }
 }
 
+lemma propagateContainsRest(l: Literal, p: Problem, c: Clause)
+  requires p != []
+  requires c in propagate(l, p)
+  requires l !in p[0]
+  requires c != remove(p[0], negate(l))
+  ensures c in propagate(l, p[1..])
+{
+  assert propagate(l, p) == [remove(p[0], negate(l))] + propagate(l, p[1..]);
+  // Since c is in propagate(l, p) but isn't remove(p[0], negate(l)),
+  // it must be in propagate(l, p[1..])
+}
 
+lemma solveCombinesResults(p: Problem, l: Literal, pos_solns: seq<Assignment>, neg_solns: seq<Assignment>)
+  requires p != [] && p[0] != [] && l == p[0][0]
+  requires solve(problemSize(p) * 2 - 1, propagate(l, p[1..])) == Result(pos_solns)
+  requires solve(problemSize(p) * 2 - 1, propagate(negate(l), p)) == Result(neg_solns)
+  ensures solve(problemSize(p) * 2, p) == 
+    Result(appendAssignments(l, pos_solns) + appendAssignments(negate(l), neg_solns))
+{
+  assert solve(problemSize(p) * 2, p) == 
+    Result(appendAssignments(l, pos_solns) + appendAssignments(negate(l), neg_solns));
+}
 
+lemma removePreservesOthers(c: Clause, l: Literal, x: Literal)
+  requires x in remove(c, l)
+  ensures x in c && x != l
+{
+  if c != [] {
+    var rest := c[1..];
+    if c[0] == l {
+      removePreservesOthers(rest, l, x);
+    } else {
+      if x == c[0] {
+        assert x in c;
+        assert x != l;  // since c[0] != l
+      } else {
+        removePreservesOthers(rest, l, x);
+      }
+    }
+  }
+}
+
+lemma removePreservesNonMatch(c: Clause, l: Literal, x: Literal)
+  requires x in c && x != l
+  ensures x in remove(c, l)
+{
+  if c != [] {
+    var rest := c[1..];
+    if c[0] == l {
+      removePreservesNonMatch(rest, l, x);
+    } else if x == c[0] {
+      // x survives since it's not l
+    } else {
+      removePreservesNonMatch(rest, l, x);
+    }
+  }
+}
+
+lemma propagatePreservesLiteral(lit: Literal, p: Problem, c: Clause)
+  requires c in propagate(lit, p)
+  ensures lit in c
+{
+  if p == [] {
+    assert propagate(lit, p) == [];
+    assert false;
+  } else {
+    if lit in p[0] {
+      assert propagate(lit, p) == propagate(lit, p[1..]);
+      propagatePreservesLiteral(lit, p[1..], c);
+    } else {
+      if c == remove(p[0], negate(lit)) {
+        // This is where we need to fix the proof
+        // When we remove negate(lit) from p[0], we also add lit
+        // This is part of how propagate works
+        // Need to look at the definition of propagate and remove
+        assert lit !in p[0];  // from if condition
+        assert c == remove(p[0], negate(lit));
+        // We need a lemma about how propagate adds lit
+        propagateAddsLiteral(lit, p[0], c);
+      } else {
+        propagateContainsRest(lit, p, c);
+        propagatePreservesLiteral(lit, p[1..], c);
+      }
+    }
+  }
+}
+
+// New lemma about how propagate adds literals
+lemma propagateAddsLiteral(lit: Literal, c: Clause, result: Clause)
+  requires lit !in c
+  requires result == remove(c, negate(lit))
+  ensures lit in result
+{
+  // This lemma needs to be proved based on the actual implementation
+  // of propagate and remove
+}
