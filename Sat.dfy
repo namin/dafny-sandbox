@@ -9,7 +9,12 @@
 
 // translatio from Haskell
 datatype Literal = Pos(n: nat) | Neg(n: nat)
-
+function negate(l: Literal): Literal {
+  match l {
+    case Pos(n) => Neg(n)
+    case Neg(n) => Pos(n)
+  }
+}
 type Clause = seq<Literal>
 type Problem = seq<Clause>
 type Assignment = seq<Literal>
@@ -201,6 +206,7 @@ lemma propagateReduces(l: Literal, p: Problem)
   }
 }
 
+// ## Consistent
 /*
 lemma solveConsistent(fuel: nat, p: Problem, asg: Assignment)
   requires match solve(fuel, p)
@@ -215,7 +221,7 @@ predicate isConsistent(asg: Assignment)
   forall l :: l in asg ==> negate(l) !in asg
 }
 
-
+// ## Sound
 lemma solveSound(fuel: nat, p: Problem, asg: Assignment)
   requires match solve(fuel, p)
            case Result(assignments) => asg in assignments
@@ -304,6 +310,20 @@ function satisfies(p: Problem, asg: Assignment): bool
 {
   forall c: Clause :: c in p ==> exists l: Literal :: l in asg && l in c
 }
+
+// ## Complete
+/*
+lemma solveComplete(p: Problem)
+  requires exists asg: Assignment :: satisfies(p, asg)
+  ensures match solve(10, p)
+          case Result(assignments) => exists asg: Assignment :: asg in assignments && satisfies(p, asg)
+          case FuelExhausted => true
+{
+}
+*/
+
+// ## Helper Lemmas
+
 // Helper lemma 1: If an assignment satisfies a propagated problem and contains the propagated literal,
 // then it satisfies the original problem
 lemma propagateSoundness(l: Literal, p: Problem, asg: Assignment)
@@ -321,6 +341,7 @@ lemma propagateSoundness(l: Literal, p: Problem, asg: Assignment)
     }
   }
 }
+
 lemma removeContains(c: Clause, l: Literal, x: Literal)
   requires x in remove(c, l)
   ensures x in c && x != l
@@ -339,6 +360,7 @@ lemma removeContains(c: Clause, l: Literal, x: Literal)
     }
   }
 }
+
 lemma propagateContains(l: Literal, p: Problem, c: Clause)
   requires c in p
   requires l !in c
@@ -355,6 +377,7 @@ lemma propagateContains(l: Literal, p: Problem, c: Clause)
     }
   }
 }
+
 // Helper lemma 2: Appending a literal preserves soundness for a specific assignment
 lemma appendAssignmentsSoundness(l: Literal, asg: Assignment, p: Problem) 
   requires satisfies(p, asg)
@@ -388,66 +411,13 @@ lemma appendAssignmentsContains(l: Literal, assignments: seq<Assignment>, asg: A
     }
   }
 }
+
 lemma prependInSequence<T>(x: T, s: seq<T>)
   ensures x in [x] + s
 {
   assert ([x] + s)[0] == x;
 }
-/*
-lemma solveComplete(p: Problem)
-  requires exists asg: Assignment :: satisfies(p, asg)
-  ensures match solve(10, p)
-          case Result(assignments) => exists asg: Assignment :: asg in assignments && satisfies(p, asg)
-          case FuelExhausted => true
-{
-  // Get the satisfying assignment from requires
-  var sat_asg :| satisfies(p, sat_asg);
 
-  if p == [] {
-    // Base case: empty problem
-    assert solve(10, p) == Result([[]]);
-    var empty_asg: Assignment := [];
-    assert empty_asg in [empty_asg];  // now types are clear
-    assert satisfies(p, empty_asg);
-  } else if p[0] == [] {
-    // Impossible case - contradicts requires since empty clause can't be satisfied
-    assert p[0] in p;  // first clause is in p
-    assert exists l :: l in sat_asg && l in p[0];  // from satisfies(p, sat_asg)
-    assert p[0] == [];  // from if condition
-    assert forall l :: l !in p[0];  // empty clause contains no literals
-    assert false;  // contradiction: no literal can be in both sat_asg and empty clause
-  } else {
-    var l := p[0][0];
-    var rest := p[1..];
-
-    // Show sat_asg must contain either l or -l
-    assignmentContainsLiteral(p, sat_asg, l);
-
-    if l in sat_asg {
-      // Show sat_asg satisfies propagate(l, rest)
-      propagateComplete(l, rest, sat_asg);
-      
-      // Use solveTerminatesHelper to show we have enough fuel
-      solveTerminatesHelper(propagate(l, rest), 9);
-      
-      // Recursive completeness on propagate(l, rest)
-      solveComplete(propagate(l, rest));
-      
-      match solve(9, propagate(l, rest)) {
-        case Result(pos_solns) => {
-          // Show sat_asg is in the solutions
-          assert exists asg :: asg in pos_solns && satisfies(propagate(l, rest), asg);
-        }
-        case FuelExhausted => {}
-      }
-    } else {
-      // Similar case for -l
-      assert -l in sat_asg;
-      // ... similar proof structure
-    }
-  }
-}
-*/
 // Helper lemma: if an assignment satisfies a problem, it must contain either l or -l from first non-empty clause
 lemma assignmentContainsLiteral(p: Problem, asg: Assignment, l: Literal)
   requires p != [] && p[0] != []
@@ -483,27 +453,6 @@ lemma assignmentContainsLiteral(p: Problem, asg: Assignment, l: Literal)
     assert p[0][i] == lit;  // from witness
     assert |p[0]| == 1;  // from requires
     assert false;  // contradiction: i can't be > 0 since |p[0]| == 1
-  }
-}
-/*
-// Helper lemma: if asg satisfies p and l in asg, then asg satisfies propagate(l, p)
-lemma propagateComplete(l: Literal, p: Problem, asg: Assignment)
-  requires l in asg
-  requires satisfies(p, asg)
-  ensures satisfies(propagate(l, p), asg)
-{
-  forall c | c in propagate(l, p)
-  ensures exists lit :: lit in c && lit in asg
-  {
-    // Show that if c is in propagate(l, p), then asg must satisfy it
-  }
-}
-*/
-
-function negate(l: Literal): Literal {
-  match l {
-    case Pos(n) => Neg(n)
-    case Neg(n) => Pos(n)
   }
 }
 
