@@ -472,6 +472,7 @@ lemma solveComplete(p: Problem, sat_asg: Assignment)
               ensures satisfies(propagate(lit, p), asg)
               {
                 assert lit in asg;  // from forall condition
+                assert isConsistent(asg);  // we need to prove this - how do we know it?
                 propagateSatisfactionPreservation(p, asg, lit);
                 assert satisfies(propagate(lit, p), asg);  // from propagateSatisfactionPreservation
                 propagateSoundness(lit, p, asg);
@@ -877,7 +878,6 @@ lemma appendAssignmentsIncludes(l: Literal, assignments: seq<Assignment>, asg: A
 lemma propagateSatisfactionPreservation(p: Problem, asg: Assignment, lit: Literal)
   requires satisfies(p, asg)
   requires lit in asg
-  requires isConsistent(asg)
   ensures satisfies(propagate(lit, p), asg)
 {
   forall c | c in propagate(lit, p)
@@ -897,11 +897,16 @@ lemma propagateSatisfactionPreservation(p: Problem, asg: Assignment, lit: Litera
       removePreservesNonMatch(orig_c, negate(lit), l);
       assert l in c && l in asg;
     } else {
-      // If l == negate(lit), we need another literal
-      assert l == negate(lit);
-      assert negate(lit) in asg;  // since l in asg
+      // If l == negate(lit), we can use lit itself
+      // We know:
+      // - lit is in asg (from requires)
+      // - c is remove(orig_c, negate(lit))
+      // - lit !in orig_c (from propagateHasOriginal)
+      // Therefore lit satisfies c, since it's in asg and can't be removed
       assert lit in asg;  // from requires
-      assert false;  // contradiction: both lit and negate(lit) in asg
+      assert lit !in orig_c;  // from propagateHasOriginal
+      assert lit != negate(lit);  // property of negate
+      assert lit in c && lit in asg;  // since lit wasn't in orig_c, it wasn't removed
     }
   }
 }
