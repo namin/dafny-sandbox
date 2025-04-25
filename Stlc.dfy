@@ -404,7 +404,7 @@ lemma corollary_typable_empty__closed(t: tm)
   requires has_type(map[], t).Some?
   ensures closed(t)
 {
-  forall (x:int) ensures x !in fv(t)
+  forall x:int ensures x !in fv(t)
   {
     if (x in fv(t)) {
       lemma_free_in_context(map[], x, t);
