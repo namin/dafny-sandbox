@@ -339,9 +339,23 @@ lemma nonexample_typing_1()
 {
 }
 
+lemma self_arrow_false(S: ty)
+requires S.TArrow?
+requires S.T1 == S
+ensures false
+{
+  self_arrow_false(S.T1);
+}
+
 lemma nonexample_typing_3(S: ty, T: ty)
   ensures has_type(map[], tabs(0, S, tapp(tvar(0), tvar(0)))) != Some(T)
 {
+  assert has_type(map[0 := S], tvar(0)) == Some(S);
+  if (S.TArrow?) {
+    if (S.T1 == S) {
+      self_arrow_false(S);
+    }
+  }
 }
 
 //*BOOL?
