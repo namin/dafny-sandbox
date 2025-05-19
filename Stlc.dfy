@@ -1,5 +1,8 @@
 // Proving type safety of a Simply Typed Lambda-Calculus in Dafny
 // adapted from Coq (https://softwarefoundations.cis.upenn.edu/plf-current/Stlc.html)
+// Latest version of the original Coq are at:
+// https://softwarefoundations.cis.upenn.edu/plf-current/Stlc.html
+// https://softwarefoundations.cis.upenn.edu/plf-current/StlcProp.html
 
 // Features the pure lambda calculus, with optional extentions:
 // - booleans (BOOL),
