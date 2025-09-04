@@ -7,7 +7,7 @@
 // the proofs of those properties were done by (Cursor) Claude Sonnet 3.5
 // including the decomposition into lemmas and the suggestion of the termination upper bound
 
-// translatio from Haskell
+// translation from Haskell
 datatype Literal = Pos(n: nat) | Neg(n: nat)
 function negate(l: Literal): Literal {
   match l {
