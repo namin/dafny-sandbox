@@ -1,11 +1,11 @@
 // A Very Small SAT Solver in Dafny
 // https://web.archive.org/web/20201109101535/http://www.cse.chalmers.se/~algehed/blogpostsHTML/SAT.html
-// translated from the original Haskell mostly by ChatGPT 4o
+// translated from the original Haskell
 // for ideas on what to prove, see this old port to Coq here: https://github.com/acorrenson/SATurne
 // see also my older DPLL work based on Adam's Chlipala textbook exercise: https://github.com/namin/coq-sandbox/blob/master/Dpll.v
-// the high-level properties to verify were initially suggested by ChatGPT 4o
-// the proofs of those properties were done by (Cursor) Claude Sonnet 3.5
-// including the decomposition into lemmas and the suggestion of the termination upper bound
+//
+// used LLMs inculding ChatGPT 4o, (Cursor) Claude Sonnet 3.5 and more recently Claude Code (Opus)
+// for initial translation, for stating high-level properties, and for the decomposition into lemmas and their proofs
 
 // translation from Haskell
 datatype Literal = Pos(n: nat) | Neg(n: nat)
