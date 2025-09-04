@@ -310,9 +310,42 @@ function satisfies(p: Problem, asg: Assignment): bool
 }
 
 // ## Complete
+// Helper: checks if an assignment assigns all variables in a problem
+predicate coversAllVariables(p: Problem, asg: Assignment)
+{
+  forall c, lit | c in p && lit in c :: 
+    lit in asg || negate(lit) in asg
+}
+
+// Lemma: propagation preserves variable coverage
+lemma propagatePreservesCoverage(l: Literal, p: Problem, asg: Assignment)
+  requires coversAllVariables(p, asg)
+  ensures coversAllVariables(propagate(l, p), asg)
+{
+  forall c, lit | c in propagate(l, p) && lit in c
+  ensures lit in asg || negate(lit) in asg
+  {
+    propagateHasOriginal(l, p, c);
+    var orig_c :| orig_c in p && l !in orig_c && c == remove(orig_c, negate(l));
+    removePreservesOthers(orig_c, negate(l), lit);
+    if lit != negate(l) {
+      assert lit in orig_c;
+      assert orig_c in p;
+      assert lit in asg || negate(lit) in asg;
+    } else {
+      // lit == negate(l) means negate(l) is in the propagated clause
+      removeContains(orig_c, negate(l), lit);
+      assert lit in orig_c;
+      assert orig_c in p;
+      assert negate(l) in asg || l in asg;
+    }
+  }
+}
+
 lemma solveComplete(p: Problem, sat_asg: Assignment)
   requires satisfies(p, sat_asg)
   requires isConsistent(sat_asg)
+  requires coversAllVariables(p, sat_asg)  // Added requirement
   ensures match solve(problemSize(p) * 2, p)
           case Result(assignments) => (
             exists asg :: asg in assignments && satisfies(p, asg) &&
@@ -394,6 +427,7 @@ lemma solveComplete(p: Problem, sat_asg: Assignment)
       propagateSatisfactionLemma(negate(l), p, sat_asg);
       
       // Use recursive call
+      propagatePreservesCoverage(negate(l), p, sat_asg);
       solveComplete(propagate(negate(l), p), sat_asg);
       
       // Connect recursive result to neg_result
@@ -427,15 +461,15 @@ lemma solveComplete(p: Problem, sat_asg: Assignment)
           ensures m in sat_asg || negate(m) in sat_asg
           {
             if m == negate(l) {
-              // We know:
-              // - lit in sat_asg && lit in p[0] (from witness)
-              // - lit != l (proven earlier)
-              assert lit in sat_asg && lit in p[0];
-              assert lit != l;
-              assert l !in sat_asg;
-              assert negate(m) == l;  // since m == negate(l)
-              assert negate(m) !in sat_asg;  // since l !in sat_asg
-              assert m in sat_asg;  // since lit in sat_asg and lit in p[0]
+              // By coversAllVariables, since l is in p[0], either l or negate(l) is in sat_asg
+              assert p[0] in p;
+              assert l in p[0];  // since l == p[0][0]
+              assert coversAllVariables(p, sat_asg);
+              assert l in sat_asg || negate(l) in sat_asg;
+              assert l !in sat_asg;  // from branch condition
+              assert negate(l) in sat_asg;
+              assert m == negate(l);
+              assert m in sat_asg;
             } else {
               assert m in neg_asg;  // since m in [negate(l)] + neg_asg and m != negate(l)
               assert m in sat_asg || negate(m) in sat_asg;  // from neg_asg's property
@@ -874,6 +908,7 @@ lemma solvePropagatedBranch(p: Problem, l: Literal, rest: Problem, sat_asg: Assi
   requires satisfies(p, sat_asg)
   requires isConsistent(sat_asg)
   requires l in sat_asg
+  requires coversAllVariables(p, sat_asg)
   ensures match solve(problemSize(p) * 2 - 1, propagate(l, rest))
           case Result(assignments) => 
             exists asg :: asg in assignments && satisfies(propagate(l, rest), asg) &&
@@ -891,6 +926,17 @@ lemma solvePropagatedBranch(p: Problem, l: Literal, rest: Problem, sat_asg: Assi
   propagateSatisfactionLemma(l, rest, sat_asg);
   
   // Use recursive call
+  // First show that coversAllVariables is preserved for rest
+  forall c, lit | c in rest && lit in c
+  ensures lit in sat_asg || negate(lit) in sat_asg
+  {
+    assert rest == p[1..];
+    assert c in p;  // since c in rest and rest is suffix of p
+    assert coversAllVariables(p, sat_asg);
+    assert lit in sat_asg || negate(lit) in sat_asg;
+  }
+  assert coversAllVariables(rest, sat_asg);
+  propagatePreservesCoverage(l, rest, sat_asg);
   solveComplete(propagate(l, rest), sat_asg);
   
   // Connect recursive result to our ensures
