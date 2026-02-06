@@ -9,6 +9,8 @@
 // - for stating high-level properties,
 // - for the decomposition into lemmas and their proofs,
 // - for great simplifications, eventually (with Opus 4.5).
+//
+// We prove that the solver is consistent, sound and complete.
 
 datatype Literal = Pos(n: nat) | Neg(n: nat)
 function negate(l: Literal): Literal {
@@ -132,7 +134,7 @@ function satisfies(p: Problem, asg: Assignment): bool
   forall c: Clause :: c in p ==> exists l: Literal :: l in asg && l in c
 }
 
-// ## Consistent
+// ## Property: Consistent
 
 lemma solveConsistent(p: Problem, asg: Assignment)
   requires asg in solve(p)
@@ -163,7 +165,7 @@ lemma solveConsistent(p: Problem, asg: Assignment)
   }
 }
 
-// ## Sound
+// ## Property: Sound
 lemma solveSound(p: Problem, asg: Assignment)
   requires asg in solve(p)
   ensures satisfies(p, asg)
@@ -194,7 +196,7 @@ lemma solveSound(p: Problem, asg: Assignment)
   }
 }
 
-// ## Complete
+// ## Property: Complete
 
 predicate coversAllVariables(p: Problem, asg: Assignment)
 {
