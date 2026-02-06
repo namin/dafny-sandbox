@@ -10,7 +10,10 @@
 // - for the decomposition into lemmas and their proofs,
 // - for great simplifications, eventually (with Opus 4.5).
 //
-// We prove that the solver is consistent, sound and complete.
+// We prove that the solver is consistent, sound and complete:
+//   - Consistent: every solution returned has no contradictory literals (solveConsistent)
+//   - Sound: every solution returned actually satisfies the problem (solveSound)
+//   - Complete: if any consistent satisfying assignment exists, solve finds a solution (solveCompletenessStrong)
 
 datatype Literal = Pos(n: nat) | Neg(n: nat)
 function negate(l: Literal): Literal {
