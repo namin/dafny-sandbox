@@ -284,6 +284,178 @@ lemma solveUnsatCorrect(p: Problem)
   }
 }
 
+// ## Extension Lemmas
+//
+// The completeness theorem requires two preconditions on the witness assignment:
+//   1. isConsistent(sat_asg) - the witness has no contradictions
+//   2. coversAllVariables(p, sat_asg) - the witness assigns every variable in the problem
+//
+// These aren't restrictive because:
+//   - Any satisfying assignment can be made consistent (remove redundant literals)
+//   - Any consistent satisfying assignment can be extended to cover all variables
+//
+// We prove these extension lemmas below.
+
+// Collect all variable indices mentioned in the problem
+ghost function allVariables(p: Problem): set<nat>
+{
+  set c, l | c in p && l in c :: l.n
+}
+
+// Extend an assignment to cover all variables in a problem
+ghost function extendToCover(p: Problem, asg: Assignment): Assignment
+{
+  extendWithVars(asg, allVariables(p))
+}
+
+// Extend an assignment by adding positive literals for uncovered variables
+ghost function extendWithVars(asg: Assignment, vars: set<nat>): Assignment
+  decreases vars
+{
+  if vars == {} then asg
+  else
+    var v :| v in vars;
+    var remaining := vars - {v};
+    if Pos(v) in asg || Neg(v) in asg then extendWithVars(asg, remaining)
+    else extendWithVars(asg + [Pos(v)], remaining)
+}
+
+// Extension preserves satisfaction
+lemma extendPreservesSatisfaction(p: Problem, asg: Assignment)
+  requires satisfies(p, asg)
+  ensures satisfies(p, extendToCover(p, asg))
+{
+  extendWithVarsPreservesSatisfaction(p, asg, allVariables(p));
+}
+
+lemma extendWithVarsPreservesSatisfaction(p: Problem, asg: Assignment, vars: set<nat>)
+  requires satisfies(p, asg)
+  ensures satisfies(p, extendWithVars(asg, vars))
+  decreases vars
+{
+  if vars != {} {
+    var v :| v in vars;
+    var remaining := vars - {v};
+    if Pos(v) in asg || Neg(v) in asg {
+      extendWithVarsPreservesSatisfaction(p, asg, remaining);
+    } else {
+      assert satisfies(p, asg + [Pos(v)]);
+      extendWithVarsPreservesSatisfaction(p, asg + [Pos(v)], remaining);
+    }
+  }
+}
+
+// Extension preserves consistency
+lemma extendPreservesConsistency(p: Problem, asg: Assignment)
+  requires isConsistent(asg)
+  ensures isConsistent(extendToCover(p, asg))
+{
+  extendWithVarsPreservesConsistency(asg, allVariables(p));
+}
+
+lemma extendWithVarsPreservesConsistency(asg: Assignment, vars: set<nat>)
+  requires isConsistent(asg)
+  ensures isConsistent(extendWithVars(asg, vars))
+  decreases vars
+{
+  if vars != {} {
+    var v :| v in vars;
+    var remaining := vars - {v};
+    if Pos(v) in asg || Neg(v) in asg {
+      extendWithVarsPreservesConsistency(asg, remaining);
+    } else {
+      assert Neg(v) !in asg;
+      appendLiteralPreservesConsistency(asg, Pos(v));
+      extendWithVarsPreservesConsistency(asg + [Pos(v)], remaining);
+    }
+  }
+}
+
+lemma appendLiteralPreservesConsistency(asg: Assignment, l: Literal)
+  requires isConsistent(asg)
+  requires negate(l) !in asg
+  ensures isConsistent(asg + [l])
+{
+  forall x | x in asg + [l] ensures negate(x) !in asg + [l] {
+    if x == l {
+      assert negate(l) !in asg;
+      negateNegate(l);
+      assert negate(l) != l;
+    } else {
+      assert x in asg;
+      assert negate(x) !in asg;
+      if negate(x) == l {
+        negateNegate(x);
+        assert x == negate(l);
+        assert false;
+      }
+    }
+  }
+}
+
+lemma negateNegate(l: Literal)
+  ensures negate(negate(l)) == l
+  ensures negate(l) != l
+{}
+
+// Extension covers all variables
+lemma extendCoversAll(p: Problem, asg: Assignment)
+  ensures coversAllVariables(p, extendToCover(p, asg))
+{
+  extendWithVarsCoversAll(p, asg, allVariables(p));
+}
+
+lemma extendWithVarsCoversAll(p: Problem, asg: Assignment, vars: set<nat>)
+  requires forall c, l :: c in p && l in c ==> l.n in vars || Pos(l.n) in asg || Neg(l.n) in asg
+  ensures coversAllVariables(p, extendWithVars(asg, vars))
+  decreases vars
+{
+  if vars == {} {
+    forall c, l | c in p && l in c
+    ensures l in asg || negate(l) in asg
+    {
+      assert Pos(l.n) in asg || Neg(l.n) in asg;
+      match l {
+        case Pos(n) => assert l in asg || Neg(n) in asg;
+        case Neg(n) => assert Pos(n) in asg || l in asg;
+      }
+    }
+  } else {
+    var v :| v in vars;
+    var remaining := vars - {v};
+    if Pos(v) in asg || Neg(v) in asg {
+      extendWithVarsCoversAll(p, asg, remaining);
+    } else {
+      assert Pos(v) in asg + [Pos(v)];
+      extendWithVarsCoversAll(p, asg + [Pos(v)], remaining);
+    }
+  }
+}
+
+// Full completeness: if a consistent satisfying assignment exists, solve finds a solution
+// (No need for coversAllVariables precondition - we can always extend!)
+lemma solveCompletenessStrong(p: Problem)
+  requires exists asg :: satisfies(p, asg) && isConsistent(asg)
+  ensures solve(p) != []
+{
+  var sat_asg :| satisfies(p, sat_asg) && isConsistent(sat_asg);
+  var full_asg := extendToCover(p, sat_asg);
+  extendPreservesSatisfaction(p, sat_asg);
+  extendPreservesConsistency(p, sat_asg);
+  extendCoversAll(p, sat_asg);
+  solveComplete(p, full_asg);
+}
+
+// UNSAT correctness (strong version): if solve returns empty, no consistent assignment satisfies it
+lemma solveUnsatCorrectStrong(p: Problem)
+  requires solve(p) == []
+  ensures !exists asg :: satisfies(p, asg) && isConsistent(asg)
+{
+  if exists asg :: satisfies(p, asg) && isConsistent(asg) {
+    solveCompletenessStrong(p);
+  }
+}
+
 // ## Helper Lemmas
 
 lemma propagateSoundness(l: Literal, p: Problem, asg: Assignment)
