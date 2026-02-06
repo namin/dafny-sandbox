@@ -5,10 +5,10 @@
 // see also my older DPLL work based on Adam's Chlipala textbook exercise: https://github.com/namin/coq-sandbox/blob/master/Dpll.v
 //
 // used LLMs inculding ChatGPT 4o, (Cursor) Claude Sonnet 3.5 and more recently Claude Code (Opus)
-// -for initial translation,
+// - for initial translation,
 // - for stating high-level properties,
 // - for the decomposition into lemmas and their proofs,
-// - for great simplifications, eventually.
+// - for great simplifications, eventually (with Opus 4.5).
 
 datatype Literal = Pos(n: nat) | Neg(n: nat)
 function negate(l: Literal): Literal {
