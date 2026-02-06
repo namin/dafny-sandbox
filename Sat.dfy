@@ -120,7 +120,8 @@ method MainExamples()
   print "No solutions found: ", result2, "\n";
 }
 
-// ## Consistent
+// ## Predicates
+
 predicate isConsistent(asg: Assignment)
 {
   forall l :: l in asg ==> negate(l) !in asg
@@ -129,6 +130,37 @@ predicate isConsistent(asg: Assignment)
 function satisfies(p: Problem, asg: Assignment): bool
 {
   forall c: Clause :: c in p ==> exists l: Literal :: l in asg && l in c
+}
+
+// ## Consistent
+
+lemma solveConsistent(p: Problem, asg: Assignment)
+  requires asg in solve(p)
+  ensures isConsistent(asg)
+  decreases problemSize(p)
+{
+  if p != [] && p[0] != [] {
+    var l := p[0][0];
+    var rest := p[1..];
+
+    if asg in appendAssignments(l, solve(propagate(l, rest))) {
+      appendAssignmentsContains(l, solve(propagate(l, rest)), asg);
+      var sub_asg :| asg == [l] + sub_asg && sub_asg in solve(propagate(l, rest));
+      propagateReduces(l, rest);
+      solveConsistent(propagate(l, rest), sub_asg);
+      propagateRemovesLiteral(l, rest);
+      solveExcludesLiterals(propagate(l, rest), sub_asg, l);
+      prependPreservesConsistency(l, sub_asg);
+    } else {
+      appendAssignmentsContains(negate(l), solve(propagate(negate(l), p)), asg);
+      var sub_asg :| asg == [negate(l)] + sub_asg && sub_asg in solve(propagate(negate(l), p));
+      propagateReduces(negate(l), p);
+      solveConsistent(propagate(negate(l), p), sub_asg);
+      propagateRemovesLiteral(negate(l), p);
+      solveExcludesLiterals(propagate(negate(l), p), sub_asg, negate(l));
+      prependPreservesConsistency(negate(l), sub_asg);
+    }
+  }
 }
 
 // ## Sound
@@ -228,6 +260,25 @@ lemma solveComplete(p: Problem, sat_asg: Assignment)
         if m == negate(l) { assert p[0] in p && l in p[0]; }
       }
     }
+  }
+}
+
+// Cleaner completeness: if a consistent satisfying assignment exists, solve finds a solution
+lemma solveCompleteness(p: Problem)
+  requires exists asg :: satisfies(p, asg) && isConsistent(asg) && coversAllVariables(p, asg)
+  ensures solve(p) != []
+{
+  var sat_asg :| satisfies(p, sat_asg) && isConsistent(sat_asg) && coversAllVariables(p, sat_asg);
+  solveComplete(p, sat_asg);
+}
+
+// UNSAT correctness: if solve returns empty, no consistent covering assignment satisfies it
+lemma solveUnsatCorrect(p: Problem)
+  requires solve(p) == []
+  ensures !exists asg :: satisfies(p, asg) && isConsistent(asg) && coversAllVariables(p, asg)
+{
+  if exists asg :: satisfies(p, asg) && isConsistent(asg) && coversAllVariables(p, asg) {
+    solveCompleteness(p);
   }
 }
 
@@ -352,6 +403,82 @@ lemma propagateSoundnessWithPrefix(l: Literal, p: Problem, rest: Problem, asg: A
       propagateContains(l, rest, c);
       var lit :| lit in remove(c, negate(l)) && lit in asg;
       removeContains(c, negate(l), lit);
+    }
+  }
+}
+
+// Helper lemmas for solveConsistent
+
+lemma propagateRemovesLiteral(l: Literal, p: Problem)
+  ensures forall c :: c in propagate(l, p) ==> l !in c && negate(l) !in c
+{
+  forall c | c in propagate(l, p)
+  ensures l !in c && negate(l) !in c
+  {
+    propagateHasOriginal(l, p, c);
+    var orig_c :| orig_c in p && l !in orig_c && c == remove(orig_c, negate(l));
+    forall x | x in c ensures x != l && x != negate(l) {
+      removeContains(orig_c, negate(l), x);
+    }
+  }
+}
+
+lemma solveExcludesLiterals(p: Problem, asg: Assignment, l: Literal)
+  requires asg in solve(p)
+  requires forall c :: c in p ==> l !in c && negate(l) !in c
+  ensures l !in asg && negate(l) !in asg
+  decreases problemSize(p)
+{
+  if p == [] || p[0] == [] {
+  } else {
+    var first := p[0][0];
+    var rest := p[1..];
+
+    if asg in appendAssignments(first, solve(propagate(first, rest))) {
+      appendAssignmentsContains(first, solve(propagate(first, rest)), asg);
+      var sub_asg :| asg == [first] + sub_asg && sub_asg in solve(propagate(first, rest));
+      propagateReduces(first, rest);
+      propagatePreservesExclusion(first, rest, l);
+      solveExcludesLiterals(propagate(first, rest), sub_asg, l);
+      assert first != l && first != negate(l);  // since l !in p[0] and negate(l) !in p[0]
+    } else {
+      appendAssignmentsContains(negate(first), solve(propagate(negate(first), p)), asg);
+      var sub_asg :| asg == [negate(first)] + sub_asg && sub_asg in solve(propagate(negate(first), p));
+      propagateReduces(negate(first), p);
+      propagatePreservesExclusion(negate(first), p, l);
+      solveExcludesLiterals(propagate(negate(first), p), sub_asg, l);
+      assert negate(first) != l && negate(first) != negate(l);
+    }
+  }
+}
+
+lemma propagatePreservesExclusion(l: Literal, p: Problem, x: Literal)
+  requires forall c :: c in p ==> x !in c && negate(x) !in c
+  ensures forall c :: c in propagate(l, p) ==> x !in c && negate(x) !in c
+{
+  forall c | c in propagate(l, p)
+  ensures x !in c && negate(x) !in c
+  {
+    propagateHasOriginal(l, p, c);
+    var orig_c :| orig_c in p && l !in orig_c && c == remove(orig_c, negate(l));
+    forall y | y in c ensures y != x && y != negate(x) {
+      removeContains(orig_c, negate(l), y);
+    }
+  }
+}
+
+lemma prependPreservesConsistency(l: Literal, asg: Assignment)
+  requires isConsistent(asg)
+  requires l !in asg
+  requires negate(l) !in asg
+  ensures isConsistent([l] + asg)
+{
+  forall x | x in [l] + asg ensures negate(x) !in [l] + asg {
+    if x == l {
+      assert negate(l) !in asg && negate(l) != l;
+    } else {
+      assert x in asg && negate(x) !in asg;
+      if negate(x) == l { assert x == negate(l); }
     }
   }
 }
