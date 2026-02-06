@@ -5,9 +5,11 @@
 // see also my older DPLL work based on Adam's Chlipala textbook exercise: https://github.com/namin/coq-sandbox/blob/master/Dpll.v
 //
 // used LLMs inculding ChatGPT 4o, (Cursor) Claude Sonnet 3.5 and more recently Claude Code (Opus)
-// for initial translation, for stating high-level properties, and for the decomposition into lemmas and their proofs
+// -for initial translation,
+// - for stating high-level properties,
+// - for the decomposition into lemmas and their proofs,
+// - for great simplifications, eventually.
 
-// translation from Haskell
 datatype Literal = Pos(n: nat) | Neg(n: nat)
 function negate(l: Literal): Literal {
   match l {
@@ -44,7 +46,6 @@ function remove(c: Clause, l: Literal): Clause
     else [x] + remove(rest, l)
 }
 
-// Helper function to append a literal to each assignment
 function appendAssignments(l: Literal, assignments: seq<Assignment>): seq<Assignment>
 {
   if assignments == [] then []
@@ -108,7 +109,6 @@ function solve(p: Problem): seq<Assignment>
     appendAssignments(negate(l), solve(propagate(negate(l), p)))
 }
 
-// end-to-end solve
 method MainExamples()
 {
   var problem1 := [[Pos(1), Neg(2)], [Neg(1), Pos(2)], [Pos(2), Pos(3)], [Neg(3)]];
@@ -163,14 +163,13 @@ lemma solveSound(p: Problem, asg: Assignment)
 }
 
 // ## Complete
-// Helper: checks if an assignment assigns all variables in a problem
+
 predicate coversAllVariables(p: Problem, asg: Assignment)
 {
   forall c, lit | c in p && lit in c ::
     lit in asg || negate(lit) in asg
 }
 
-// Lemma: propagation preserves variable coverage
 lemma propagatePreservesCoverage(l: Literal, p: Problem, asg: Assignment)
   requires coversAllVariables(p, asg)
   ensures coversAllVariables(propagate(l, p), asg)
@@ -181,11 +180,6 @@ lemma propagatePreservesCoverage(l: Literal, p: Problem, asg: Assignment)
     propagateHasOriginal(l, p, c);
     var orig_c :| orig_c in p && l !in orig_c && c == remove(orig_c, negate(l));
     removeContains(orig_c, negate(l), lit);
-    if lit != negate(l) {
-      assert lit in orig_c;
-    } else {
-      removeContains(orig_c, negate(l), lit);
-    }
   }
 }
 
@@ -239,16 +233,12 @@ lemma solveComplete(p: Problem, sat_asg: Assignment)
 
 // ## Helper Lemmas
 
-// Helper lemma 1: If an assignment satisfies a propagated problem and contains the propagated literal,
-// then it satisfies the original problem
 lemma propagateSoundness(l: Literal, p: Problem, asg: Assignment)
-  requires l in asg  // assignment contains the literal we propagated
+  requires l in asg
   requires satisfies(propagate(l, p), asg)
   ensures satisfies(p, asg)
 {
-  forall c | c in p 
-  ensures exists lit :: lit in c && lit in asg
-  {
+  forall c | c in p ensures exists lit :: lit in c && lit in asg {
     if l !in c {
       propagateContains(l, p, c);
       var lit :| lit in remove(c, negate(l)) && lit in asg;
@@ -292,7 +282,6 @@ lemma prependInSequence<T>(x: T, s: seq<T>)
   ensures x in [x] + s
 {}
 
-// Helper lemma: if c is in propagate(l, p), then there exists an original clause in p
 lemma propagateHasOriginal(l: Literal, p: Problem, c: Clause)
   requires c in propagate(l, p)
   ensures exists orig_c :: orig_c in p && l !in orig_c && c == remove(orig_c, negate(l))
@@ -302,14 +291,6 @@ lemma propagateHasOriginal(l: Literal, p: Problem, c: Clause)
     propagateHasOriginal(l, p[1..], c);
   }
 }
-
-lemma propagateContainsRest(l: Literal, p: Problem, c: Clause)
-  requires p != []
-  requires c in propagate(l, p)
-  requires l !in p[0]
-  requires c != remove(p[0], negate(l))
-  ensures c in propagate(l, p[1..])
-{}
 
 lemma removePreservesNonMatch(c: Clause, l: Literal, x: Literal)
   requires x in c && x != l
