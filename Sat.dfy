@@ -4,7 +4,7 @@
 // for ideas on what to prove, see this old port to Coq here: https://github.com/acorrenson/SATurne
 // see also my older DPLL work based on Adam's Chlipala textbook exercise: https://github.com/namin/coq-sandbox/blob/master/Dpll.v
 //
-// used LLMs inculding ChatGPT 4o, (Cursor) Claude Sonnet 3.5 and more recently Claude Code (Opus)
+// used LLMs including ChatGPT 4o, (Cursor) Claude Sonnet 3.5 and more recently Claude Code (Opus)
 // - for initial translation,
 // - for stating high-level properties,
 // - for the decomposition into lemmas and their proofs,
@@ -289,15 +289,11 @@ lemma solveUnsatCorrect(p: Problem)
 
 // ## Extension Lemmas
 //
-// The completeness theorem requires two preconditions on the witness assignment:
-//   1. isConsistent(sat_asg) - the witness has no contradictions
-//   2. coversAllVariables(p, sat_asg) - the witness assigns every variable in the problem
-//
-// These aren't restrictive because:
-//   - Any satisfying assignment can be made consistent (remove redundant literals)
-//   - Any consistent satisfying assignment can be extended to cover all variables
-//
-// We prove these extension lemmas below.
+// The core completeness theorem (solveComplete) requires the witness assignment to
+// cover all variables in the problem. This isn't restrictive because any consistent
+// satisfying assignment can be extended to cover all variables (just assign uncovered
+// variables arbitrarily). We prove this extension lemma below, which enables the
+// stronger solveCompletenessStrong that only requires a consistent satisfying assignment.
 
 // Collect all variable indices mentioned in the problem
 ghost function allVariables(p: Problem): set<nat>
